@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#f3f8fc">
+  <title>汤圆记账 · 个人账本</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icon.svg">
+  <style>
+    :root {
+      --ink: #18231e;
+      --muted: #7d8881;
+      --line: #e9ede8;
+      --paper: #fff;
+      --canvas: #f6f7f3;
+      --blue: #367eaa;
+      --blue-soft: #e8f3fa;
+      --orange: #bd7040;
+      --orange-soft: #fbf1e9;
+      --red: #c45c56;
+      --red-soft: #fbefed;
+      --shadow: 0 10px 32px rgba(32, 52, 40, .055);
+      font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: #f3f8fc; font-size: 14px; }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    .app { min-height: 100vh; display: grid; grid-template-columns: 238px minmax(0, 1fr); }
+    aside { background: #fff; border-right: 1px solid var(--line); padding: 27px 17px; display: flex; flex-direction: column; }
+    .brand { display: flex; align-items: center; gap: 11px; padding: 0 10px; margin-bottom: 37px; }
+    .brand-mark { width: 35px; height: 35px; border-radius: 12px; background: var(--blue); color: white; display: grid; place-items: center; font-size: 19px; }
+    .brand strong { font-size: 17px; letter-spacing: 1px; }
+    .brand small { display: block; color: var(--muted); font-size: 10px; margin-top: 2px; letter-spacing: .6px; }
+    .nav-label { color: #a0aaa3; font-size: 11px; letter-spacing: 1px; padding: 0 11px; margin: 0 0 10px; }
+    .nav { display: grid; gap: 5px; }
+    .nav button { border: 0; background: transparent; color: #6e7972; border-radius: 10px; text-align: left; padding: 11px 12px; display: flex; align-items: center; gap: 12px; }
+    .nav button span { width: 29px; height: 29px; border-radius: 9px; background: #f0f5f8; display: grid; place-items: center; font-size: 16px; }
+    .nav button.active { background: var(--blue-soft); color: var(--blue); font-weight: 600; }
+    .nav button.active span { background: #d8eaf5; }
+    .side-bottom { margin-top: auto; padding: 16px 8px 0; }
+    .privacy { background: #f5f7f4; border-radius: 12px; padding: 13px; color: #758078; font-size: 11px; line-height: 1.7; }
+    .privacy b { color: var(--blue); display: block; font-size: 12px; margin-bottom: 4px; }
+    main { min-width: 0; padding: 32px clamp(20px, 4vw, 58px) 55px; max-width: 1540px; width: 100%; margin: 0 auto; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 15px; margin-bottom: 28px; }
+    .eyebrow { color: var(--muted); font-size: 12px; margin-bottom: 7px; }
+    h1 { font-size: 25px; margin: 0; letter-spacing: -.5px; }
+    .top-actions { display: flex; gap: 9px; }
+    .button { border: 1px solid var(--line); background: white; color: #46534b; border-radius: 9px; padding: 9px 13px; font-weight: 500; transition: .15s; }
+    .button:hover { border-color: #bac9be; transform: translateY(-1px); }
+    .button.primary { background: var(--blue); color: white; border-color: var(--blue); }
+    .button.primary:hover { background: #286a93; }
+    .button.subtle { border-color: transparent; background: transparent; color: var(--muted); }
+    .button.danger { color: var(--red); }
+    .page { display: none; }
+    .page.active { display: block; }
+    .hero { color: white; border-radius: 17px; padding: 24px 27px; background: linear-gradient(112deg, #397ca5, #64a3cc); position: relative; overflow: hidden; margin-bottom: 18px; }
+    .hero:after { content: ""; position: absolute; width: 230px; height: 230px; right: 8%; top: -135px; border: 1px solid rgba(255,255,255,.13); border-radius: 50%; box-shadow: 0 0 0 30px rgba(255,255,255,.035), 0 0 0 65px rgba(255,255,255,.025); }
+    .hero-label { color: #d7eaf6; font-size: 12px; }
+    .hero-amount { font-size: clamp(30px, 4vw, 40px); font-weight: 600; letter-spacing: .3px; margin: 7px 0 16px; }
+    .hero-foot { display: flex; gap: 23px; color: #e0eff8; font-size: 12px; }
+    .hero-foot b { color: white; font-weight: 600; margin-left: 5px; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 19px; }
+    .stat, .panel { background: var(--paper); border: 1px solid #edf0ec; border-radius: 13px; box-shadow: var(--shadow); }
+    .stat { padding: 17px 19px; }
+    .stat-action { width: 100%; color: inherit; text-align: left; cursor: pointer; transition: border-color .15s, transform .15s, box-shadow .15s; }
+    .stat-action:hover, .stat-action:focus-visible { border-color: #c4d4c8; box-shadow: 0 8px 24px rgba(32, 52, 40, .09); transform: translateY(-1px); outline: none; }
+    .stat-action:focus-visible { box-shadow: 0 0 0 3px #e3efe6; }
+    .stat-title { color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; }
+    .stat-number { margin-top: 12px; font-size: 23px; font-weight: 600; }
+    .stat-number.income { color: var(--blue); }
+    .stat-number.expense { color: var(--orange); }
+    .stat-note { color: #a2aaa4; font-size: 11px; margin-top: 5px; }
+    .grid-two { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr); gap: 16px; margin-bottom: 18px; }
+    .panel { padding: 20px; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 17px; }
+    .panel-head h2 { font-size: 15px; margin: 0; }
+    .text-link { border: 0; background: none; padding: 4px 0; color: var(--blue); font-size: 12px; }
+    .account-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .account-card { width: 100%; border: 1px solid var(--line); border-radius: 11px; padding: 13px; min-width: 0; background: white; color: inherit; text-align: left; transition: border-color .15s, box-shadow .15s, transform .15s; }
+    .account-card:hover, .account-card:focus-visible { border-color: #b7cdbd; box-shadow: 0 5px 16px rgba(32, 52, 40, .08); transform: translateY(-1px); outline: none; }
+    .account-card:focus-visible { box-shadow: 0 0 0 3px #e3efe6; }
+    .account-management-item { min-width: 0; display: grid; gap: 3px; }
+    .account-management-actions { display: flex; justify-content: flex-end; gap: 8px; }
+    .account-top { display: flex; align-items: center; gap: 8px; color: #68746c; font-size: 12px; }
+    .account-icon { width: 30px; height: 30px; background: #edf5fa; border-radius: 10px; display: grid; place-items: center; font-size: 17px; }
+    .account-amount { font-size: 17px; font-weight: 600; margin: 12px 0 0 35px; overflow-wrap: anywhere; }
+    .chart { height: 145px; display: flex; gap: 12px; align-items: end; padding: 4px 4px 0; }
+    .chart-col { flex: 1; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: end; gap: 7px; color: #929b94; font-size: 10px; }
+    .bar-wrap { height: 112px; width: min(30px, 75%); display: flex; align-items: end; gap: 3px; justify-content: center; }
+    .bar { width: 11px; min-height: 3px; border-radius: 5px 5px 2px 2px; background: #a8cfe6; }
+    .bar.out { background: #f0c9a9; }
+    .legend { display: flex; gap: 14px; color: #89938c; font-size: 10px; }
+    .dot { display: inline-block; height: 7px; width: 7px; border-radius: 50%; background: #a8cfe6; margin-right: 4px; }
+    .dot.out { background: #f0c9a9; }
+    .transaction-list { display: grid; }
+    .transaction { min-height: 63px; border-top: 1px solid #f0f2ef; display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 11px; align-items: center; }
+    .transaction:first-child { border-top: 0; }
+    .tx-icon { height: 38px; width: 38px; border-radius: 12px; display: grid; place-items: center; background: #f3f5f2; color: #637169; font-size: 18px; }
+    .tx-icon.in { background: var(--blue-soft); color: var(--blue); }
+    .tx-icon.out { background: var(--orange-soft); color: var(--orange); }
+    .tx-title { font-weight: 500; font-size: 13px; }
+    .tx-meta { color: #9aa39c; font-size: 10px; margin-top: 5px; }
+    .tx-amount { font-size: 13px; font-weight: 600; white-space: nowrap; }
+    .tx-amount.in { color: var(--blue); }
+    .tx-amount.out { color: var(--orange); }
+    .tx-actions { display: flex; align-items: center; gap: 7px; }
+    .tx-edit { border: 0; padding: 5px 7px; color: var(--blue); background: transparent; font-size: 11px; }
+    .tx-edit.danger { color: var(--red); }
+    .tx-edit:hover { text-decoration: underline; }
+    .section-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .field-small { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; color: #56625a; background: white; }
+    .debt-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+    .debt-summary .stat { box-shadow: none; }
+    .debt-summary .stat-number { font-size: 20px; }
+    .debt-list { display: grid; gap: 11px; }
+    .debt-card { border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 16px; }
+    .debt-title { font-weight: 600; }
+    .debt-kind { display: inline-block; border-radius: 20px; padding: 3px 8px; font-size: 10px; color: var(--orange); background: var(--orange-soft); margin-right: 7px; }
+    .debt-kind.lend { color: var(--blue); background: var(--blue-soft); }
+    .debt-meta { color: #8a958d; font-size: 11px; margin-top: 9px; line-height: 1.8; }
+    .debt-right { text-align: right; min-width: 130px; }
+    .debt-balance { font-size: 18px; font-weight: 600; }
+    .debt-balance small { display: block; color: #98a19a; font-size: 10px; font-weight: 400; margin-top: 3px; }
+    .debt-actions { margin-top: 11px; display: flex; justify-content: end; gap: 5px; }
+    .account-details-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+    .account-details-stat { min-width: 0; padding: 11px; border-radius: 10px; background: #f6f8f5; }
+    .account-details-stat span { display: block; color: var(--muted); font-size: 10px; }
+    .account-details-stat strong { display: block; margin-top: 6px; font-size: 14px; overflow-wrap: anywhere; }
+    .account-details-stat.income strong { color: var(--blue); }
+    .account-details-stat.expense strong { color: var(--orange); }
+    .account-details-list { max-height: 48vh; overflow: auto; }
+    .empty { padding: 38px 12px; text-align: center; color: #9aa39c; font-size: 12px; }
+    .modal-backdrop { display: none; position: fixed; inset: 0; z-index: 5; background: rgba(24,35,30,.38); padding: 20px; align-items: center; justify-content: center; }
+    .modal-backdrop.open { display: flex; }
+    .modal { background: white; width: min(100%, 490px); max-height: 92vh; overflow: auto; border-radius: 16px; padding: 23px; box-shadow: 0 20px 70px rgba(16,30,22,.2); }
+    .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+    .modal-head h2 { margin: 0; font-size: 17px; }
+    .close { border: 0; border-radius: 8px; background: #f4f6f3; width: 30px; height: 30px; color: #68736b; font-size: 17px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+    .form-field { display: grid; gap: 6px; }
+    .form-field.full { grid-column: 1 / -1; }
+    .form-field label { color: #6f7a72; font-size: 11px; }
+    .form-field input, .form-field select { width: 100%; border: 1px solid #e2e8e2; border-radius: 8px; padding: 10px; color: var(--ink); background: white; outline: none; }
+    .form-field input:focus, .form-field select:focus { border-color: #7ca98b; box-shadow: 0 0 0 3px #e9f3ec; }
+    .form-actions { display: flex; justify-content: end; gap: 8px; margin-top: 20px; }
+    .type-switch { display: flex; padding: 3px; border-radius: 9px; background: #f3f5f2; gap: 3px; }
+    .type-switch button { flex: 1; border: 0; border-radius: 7px; padding: 8px; background: transparent; color: #7a857d; font-size: 12px; }
+    .type-switch button.selected { background: white; color: var(--blue); box-shadow: 0 1px 4px #dce4dd; font-weight: 600; }
+    .notice { color: #8b958e; background: #f6f8f5; padding: 10px; border-radius: 8px; font-size: 11px; line-height: 1.65; }
+    .wallet-tabs { display: flex; gap: 18px; align-items: center; margin: -8px 0 20px; color: #92969e; font-size: 17px; font-weight: 600; }
+    .wallet-tabs .selected { color: var(--ink); font-size: 24px; }
+    .wallet-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+    .wallet-total { background: white; border-radius: 22px; padding: 20px 22px; box-shadow: var(--shadow); min-height: 125px; }
+    .wallet-total-label { color: #8a9096; font-size: 15px; font-weight: 600; }
+    .wallet-total-value { color: #111; font-size: clamp(24px, 3.5vw, 34px); font-weight: 800; margin: 8px 0 4px; letter-spacing: .4px; }
+    .wallet-total-sub { color: #92979d; font-size: 13px; font-weight: 600; }
+    .money-shelf { border: 1px solid #e8ebe7; border-radius: 18px; padding: 20px; background: linear-gradient(145deg, #fff, #f5f6f2); margin-bottom: 16px; }
+    .shelf-head { display: flex; justify-content: space-between; align-items: center; color: #68746b; font-size: 12px; font-weight: 600; }
+    .shelf-head span:last-child { border-radius: 20px; background: #f0f3ef; padding: 5px 9px; }
+    .cash-display { padding: 18px 0 14px; }
+    .cash-caption { color: #848e87; font-size: 12px; }
+    .cash-amount { margin-top: 6px; color: #b6332c; font-size: clamp(34px, 6vw, 48px); line-height: 1.1; font-weight: 750; letter-spacing: -.8px; overflow-wrap: anywhere; }
+    .cash-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px; color: #8b948d; font-size: 11px; }
+    .cash-meter { height: 6px; overflow: hidden; border-radius: 8px; background: #edf0eb; }
+    .cash-meter-fill { height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, #d97966, #a52e28); transition: width .35s ease; }
+    .cash-meter-note { margin: 7px 0 16px; color: #98a19a; font-size: 10px; }
+    .banknote-groups { display: grid; gap: 12px; }
+    .denomination-group { min-width: 0; }
+    .denomination-head { display: flex; align-items: center; justify-content: space-between; color: #6d776f; font-size: 11px; margin-bottom: 7px; }
+    .denomination-head b { color: #566158; font-size: 12px; }
+    .banknote-stack { position: relative; width: 100%; min-height: 180px; }
+    .banknote { position: absolute; left: 0; right: 0; height: 166px; overflow: hidden; border: 1.5px solid color-mix(in srgb, var(--bill-ink) 62%, transparent); border-bottom-width: 3px; border-radius: 8px; box-shadow: 0 7px 12px #55413938, inset 0 0 0 1px #ffffffa8, inset 0 0 13px #754f2530, inset 0 -5px 0 #72513a24; background: radial-gradient(ellipse at 49% 53%, #fff9e86b 0 25%, transparent 62%), radial-gradient(ellipse at 12% 8%, #ffffff78, transparent 42%), repeating-linear-gradient(165deg, transparent 0 8px, #ffffff52 9px 10px, transparent 11px 15px), repeating-linear-gradient(15deg, transparent 0 12px, #ffffff20 13px 14px, transparent 15px 21px), radial-gradient(#72533b42 .5px, transparent .9px), repeating-linear-gradient(92deg, transparent 0 2px, #76573b0c 2.5px 3px, transparent 3.5px 5px), linear-gradient(115deg, var(--bill-light), var(--bill-dark)); background-size: auto, auto, auto, auto, 3px 3px, 7px 7px, auto; color: var(--bill-ink); }
+    .banknote { cursor: grab; touch-action: none; user-select: none; transition: top 240ms cubic-bezier(.2,.75,.25,1), left 240ms cubic-bezier(.2,.75,.25,1), right 240ms cubic-bezier(.2,.75,.25,1), transform 180ms ease, box-shadow 220ms ease; }
+    .banknote:hover { box-shadow: 0 10px 18px #55413948, inset 0 0 0 1px #ffffffa8, inset 0 0 13px #754f2530, inset 0 -5px 0 #72513a24; }
+    .banknote.is-dragging { cursor: grabbing; transition: none; box-shadow: 0 18px 30px #44342f50, inset 0 0 0 1px #ffffffa8, inset 0 0 13px #754f2530, inset 0 -5px 0 #72513a24; }
+    .banknote.is-dragging { transform: translate(var(--drag-x, 0px), var(--drag-y, 0px)) rotate(var(--drag-rotate, 0deg)); }
+    .banknote.is-thrown { pointer-events: none; animation: bill-throw 360ms cubic-bezier(.18,.7,.28,1) forwards; }
+    @keyframes bill-throw { to { transform: translate(var(--throw-x), var(--throw-y)) rotate(var(--throw-rotate)) scale(.82); opacity: 0; filter: blur(1px); } }
+    .bill-feedback { position: fixed; z-index: 8; pointer-events: none; color: #208251; font-size: 22px; font-weight: 800; text-shadow: 0 1px white, 0 2px 8px #24422b35; animation: bill-feedback-rise 850ms cubic-bezier(.15,.75,.3,1) forwards; }
+    @keyframes bill-feedback-rise { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.7); } 18% { opacity: 1; transform: translate(-50%, -4px) scale(1.08); } 72% { opacity: 1; transform: translate(-50%, -42px) scale(1); } 100% { opacity: 0; transform: translate(-50%, -64px) scale(.96); } }
+    .denomination-control { display: flex; align-items: center; gap: 7px; }
+    .denomination-status { color: #9ba39c; font-size: 10px; }
+    .restore-bills { border: 0; border-radius: 20px; background: #f2f4f0; color: #54705d; padding: 5px 9px; font-size: 10px; }
+    .restore-bills[hidden] { display: none; }
+    .coin-chip { cursor: grab; touch-action: none; user-select: none; }
+    .coin-chip.is-dragging { cursor: grabbing; opacity: .72; }
+    .coin-chip.is-thrown { pointer-events: none; animation: bill-throw 320ms ease-in forwards; }
+    .coin-groups { min-height: 0; }
+    .restore-coins { border: 0; border-radius: 20px; background: #f2f4f0; color: #54705d; padding: 6px 10px; font-size: 10px; }
+    .restore-coins[hidden] { display: none; }
+    .banknote::before { content: ""; position: absolute; width: 120px; height: 120px; left: 29%; top: 21px; border: 1px solid currentColor; border-radius: 50%; opacity: .22; background: repeating-radial-gradient(circle, transparent 0 2.7px, currentColor 3.1px 3.4px, transparent 3.8px 5px); box-shadow: inset 0 0 0 5px #ffffff12, 0 0 0 3px #ffffff18; }
+    .banknote::after { content: ""; position: absolute; inset: 4px; border: 2px double color-mix(in srgb, var(--bill-ink) 50%, transparent); border-radius: 6px; opacity: .42; background: repeating-linear-gradient(90deg, transparent 0 3px, #ffffff13 4px 5px); box-shadow: inset 0 -5px 0 color-mix(in srgb, var(--bill-ink) 14%, transparent); pointer-events: none; }
+    .bill-paper-edge { position: absolute; z-index: 2; left: 5px; right: 5px; bottom: 2px; height: 5px; border-radius: 0 0 5px 5px; background: repeating-linear-gradient(0deg, color-mix(in srgb, var(--bill-ink) 30%, #fff) 0 1px, transparent 1px 2px); opacity: .55; }
+    .banknote.landmark { --bill-light: #ffd6c6; --bill-dark: #efa092; --bill-ink: #a93831; }
+    .banknote.orange { --bill-light: #d7e7cd; --bill-dark: #a9c69b; --bill-ink: #3f674c; }
+    .banknote.green { --bill-light: #efdfc1; --bill-dark: #c6a675; --bill-ink: #795b30; }
+    .banknote.teal { --bill-light: #d0e8ee; --bill-dark: #91c1cf; --bill-ink: #396779; }
+    .banknote.olive { --bill-light: #e0d9ee; --bill-dark: #b8a8d0; --bill-ink: #625177; }
+    .banknote.small-green { --bill-light: #e8edcf; --bill-dark: #c8d39f; --bill-ink: #586740; }
+    .bill-security { position: absolute; z-index: 1; inset: 27px auto 27px 20px; width: 72px; border: 1px solid currentColor; border-radius: 50%; display: grid; place-items: center; opacity: .35; font: 700 28px Georgia, serif; box-shadow: inset 0 0 0 4px #ffffff20, 0 0 0 2px #ffffff20; }
+    .bill-thread { position: absolute; z-index: 1; top: 7px; bottom: 7px; left: 68%; width: 7px; border-left: 1px solid #ffffffa6; border-right: 1px solid #ffffff85; background: repeating-linear-gradient(0deg, #ffffff58 0 2px, transparent 2px 5px); opacity: .62; }
+    .bill-fibers { position: absolute; z-index: 1; inset: 0; pointer-events: none; opacity: .58; background: repeating-linear-gradient(112deg, transparent 0 23px, #ffffff58 24px, transparent 25px 43px), repeating-linear-gradient(8deg, transparent 0 31px, #71483324 32px, transparent 33px 54px), radial-gradient(ellipse at 20% 80%, #fff9 .5px, transparent 1.1px); background-size: auto, auto, 5px 5px; mix-blend-mode: soft-light; }
+    .bill-value { position: absolute; z-index: 2; right: 19px; top: 10px; font: 800 43px Georgia, serif; text-shadow: 0 1px #ffffff80; }
+    .bill-seal { position: absolute; z-index: 2; left: 107px; top: 15px; border: 1px solid currentColor; padding: 3px 8px; border-radius: 3px; font-size: 9px; letter-spacing: 1px; opacity: .88; }
+    .bill-landmark { position: absolute; z-index: 1; left: 108px; bottom: 19px; width: 170px; height: 79px; opacity: .43; }
+    .bill-watermark { position: absolute; z-index: 1; left: 31%; top: 61px; color: currentColor; font-family: Georgia, serif; font-size: 18px; font-weight: 700; opacity: .3; }
+    .bill-disclaimer { position: absolute; z-index: 2; left: 12px; bottom: 9px; color: currentColor; font-size: 7px; letter-spacing: .7px; opacity: .82; }
+    .bill-unit { position: absolute; z-index: 2; right: 22px; bottom: 14px; font-size: 12px; letter-spacing: 1.5px; opacity: .9; }
+    .coin-groups { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .coin-chip { display: flex; align-items: center; gap: 7px; padding: 6px 10px 6px 6px; border-radius: 24px; background: #f2f3ef; color: #727b74; font-size: 10px; }
+    .coin-face { height: 29px; width: 29px; flex: 0 0 29px; display: grid; place-items: center; border: 2px ridge #b3945e; border-radius: 50%; color: #795d38; background: radial-gradient(circle at 35% 30%, #ead39e, #ae8751 75%); font-size: 8px; font-weight: 700; }
+    .coin-chip.silver .coin-face { color: #666; border-color: #acafab; background: radial-gradient(circle at 35% 30%, #f0f0ed, #a5a7a4 75%); }
+    .cash-add { position: fixed; z-index: 2; right: max(24px, calc((100vw - 1540px) / 2 + 50px)); bottom: 94px; width: 62px; height: 62px; border: 0; border-radius: 50%; color: white; background: #69a9d0; box-shadow: 0 7px 20px #69a9d04d; font-size: 35px; line-height: 1; }
+    .cash-add:hover { background: #4b94c1; transform: translateY(-2px); }
+    #toast { position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; z-index: 10; background: #23392d; color: white; padding: 10px 16px; border-radius: 9px; transition: .2s; font-size: 12px; }
+    #toast.show { opacity: 1; transform: translate(-50%, 0); }
+    @media (max-width: 850px) {
+      .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+      aside { position: sticky; top: 0; z-index: 3; min-width: 0; padding: 13px 14px; border-right: 0; border-bottom: 1px solid var(--line); flex-direction: row; align-items: center; gap: 14px; }
+      .brand { margin: 0; padding: 0 4px; }
+      .brand-mark { width: 31px; height: 31px; }
+      .brand small, .nav-label, .side-bottom { display: none; }
+      .nav { display: flex; flex: 1; min-width: 0; overflow-x: auto; gap: 2px; }
+      .nav button { white-space: nowrap; padding: 9px 10px; }
+      main { margin: 0 auto; padding: 25px 20px 40px; }
+    }
+    @media (max-width: 620px) {
+      aside { height: calc(80px + env(safe-area-inset-top, 0px)); padding: env(safe-area-inset-top, 0px) calc(14px + env(safe-area-inset-right, 0px)) 0 calc(14px + env(safe-area-inset-left, 0px)); gap: 8px; }
+      .brand { gap: 8px; }
+      .brand-mark { width: 29px; height: 29px; font-size: 16px; }
+      .brand strong { font-size: 15px; }
+      .nav { position: fixed; left: calc(12px + env(safe-area-inset-left, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); z-index: 4; justify-content: space-around; gap: 3px; padding: 4px; border: 1px solid #edf0ec; border-radius: 40px; background: #ffffffed; box-shadow: 0 5px 20px #24372b18; backdrop-filter: blur(12px); }
+      .nav button { flex: 1; flex-direction: column; justify-content: center; gap: 2px; padding: 5px 2px; font-size: 10px; }
+      .nav button span { width: 24px; height: 24px; font-size: 17px; }
+      main { padding: 12px calc(16px + env(safe-area-inset-right, 0px)) calc(100px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px)); }
+      .cash-add { right: calc(20px + env(safe-area-inset-right, 0px)); bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+      .topbar { align-items: center; flex-direction: row; gap: 8px; margin-bottom: 14px; }
+      .eyebrow { font-size: 10px; margin-bottom: 3px; }
+      h1 { font-size: 20px; }
+      .top-actions { width: auto; flex-wrap: nowrap; gap: 4px; }
+      .top-actions .button { flex: 0 1 auto; padding: 7px 6px; font-size: 10px; white-space: nowrap; }
+      .stats { grid-template-columns: 1fr 1fr; }
+      .stats .stat:last-child { grid-column: 1 / -1; }
+      .panel-head { align-items: flex-start; flex-wrap: wrap; }
+      .panel-head > div { min-width: 0; }
+      .panel-head > .button { white-space: nowrap; }
+      .section-tools { width: 100%; }
+      .section-tools .field-small { flex: 1 1 130px; min-width: 0; }
+      .section-tools select { flex: 1 1 0; min-width: 0; }
+      .hero { padding: 20px; }
+      .hero-foot { flex-wrap: wrap; gap: 8px 16px; }
+      .wallet-summary { gap: 10px; }
+      .wallet-total { min-height: 115px; border-radius: 18px; padding: 17px 15px; }
+      .wallet-total-label { font-size: 13px; }
+      .wallet-total-sub { font-size: 11px; }
+      .money-shelf { padding: 14px; }
+      .banknote-stack { min-height: 151px; }
+      .banknote { height: 139px; }
+      .bill-security { inset: 23px auto 23px 13px; width: 55px; font-size: 22px; }
+      .bill-value { right: 14px; font-size: 34px; }
+      .bill-seal { left: 76px; top: 13px; font-size: 8px; }
+      .bill-landmark { left: 77px; bottom: 15px; width: 133px; height: 66px; }
+      .bill-watermark { top: 51px; font-size: 14px; }
+      .bill-unit { right: 16px; bottom: 10px; font-size: 10px; }
+      .cash-add { right: 20px; bottom: 88px; width: 56px; height: 56px; }
+      .debt-summary { grid-template-columns: 1fr; gap: 8px; }
+      .debt-summary .stat { padding: 13px 15px; display: flex; justify-content: space-between; align-items: center; }
+      .debt-summary .stat-number { margin: 0; }
+      .debt-card { grid-template-columns: 1fr; gap: 10px; }
+      .debt-right { display: flex; align-items: center; justify-content: space-between; text-align: left; }
+      .debt-balance small { display: inline; margin-left: 4px; }
+      .debt-actions { margin: 0; }
+      .account-list { grid-template-columns: 1fr 1fr; }
+      .grid-two { grid-template-columns: 1fr; }
+      .transaction { grid-template-columns: 34px minmax(0, 1fr) auto; gap: 8px; }
+      .tx-icon { width: 34px; height: 34px; }
+      .tx-actions { gap: 2px; }
+      .tx-edit { padding: 5px 4px; }
+      .debt-right { min-width: 0; }
+      .account-details-summary { gap: 5px; }
+      .account-details-stat { padding: 8px; }
+      .account-details-stat strong { font-size: 12px; }
+    }
+    @media (max-width: 430px) {
+      body { font-size: 16px; }
+      .brand strong { font-size: 16px; }
+      h1 { font-size: 22px; }
+      .eyebrow { font-size: 12px; }
+      main { padding-left: calc(14px + env(safe-area-inset-left, 0px)); padding-right: calc(14px + env(safe-area-inset-right, 0px)); }
+      .nav button { font-size: 12px; padding: 5px 2px; gap: 2px; }
+      .top-actions .button { min-height: 44px; padding: 8px 9px; font-size: 14px; }
+      .hero-label, .hero-foot, .stat-title, .account-top, .text-link { font-size: 14px; }
+      .stat-note, .tx-meta, .chart-col, .legend { font-size: 12px; }
+      .account-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .account-card { padding: 10px; }
+      .account-top { gap: 6px; }
+      .account-amount { margin: 8px 0 0; font-size: 16px; }
+      .panel-head h2 { font-size: 16px; }
+      .tx-title, .tx-amount { font-size: 15px; }
+      .tx-edit { font-size: 12px; }
+      .wallet-total-label { font-size: 14px; }
+      .wallet-total-sub { font-size: 13px; }
+      .debt-kind { font-size: 12px; }
+      .panel { padding: 15px; }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+      .stats .stat:last-child { grid-column: 1 / -1; }
+      .stat-number { font-size: 21px; overflow-wrap: anywhere; }
+      .account-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .wallet-total { padding: 14px 12px; }
+      .wallet-total-value { font-size: clamp(20px, 7vw, 28px); overflow-wrap: anywhere; }
+      .wallet-summary { grid-template-columns: 1fr; }
+      .wallet-total { min-height: 0; }
+      .shelf-head { align-items: flex-start; gap: 8px; }
+      .shelf-head span:first-child { min-width: 0; }
+      .shelf-head span:last-child { flex: 0 0 auto; }
+      .panel-head .section-tools { flex-wrap: nowrap; }
+      .section-tools .field-small { flex: 1 1 0; width: 0; }
+      .modal-backdrop { padding: 12px; }
+      .modal { padding: 18px; max-height: calc(100dvh - 24px); }
+      .transaction { grid-template-columns: 32px minmax(0, 1fr) auto; gap: 7px; }
+      .tx-icon { width: 32px; height: 32px; }
+      .tx-amount { font-size: 12px; }
+      .tx-actions { gap: 0; }
+      .tx-edit { font-size: 10px; padding: 5px 3px; }
+      .form-actions { flex-wrap: wrap; }
+      .form-actions .button { flex: 1; }
+      .form-grid { grid-template-columns: 1fr; }
+      .form-field.full { grid-column: auto; }
+    }
+    @media (max-width: 360px) {
+      .top-actions { display: grid; grid-template-columns: 1fr 1fr; }
+      .top-actions .button { width: 100%; }
+      .top-actions .button.primary { grid-column: 1 / -1; }
+      .section-tools .field-small { padding-left: 7px; padding-right: 7px; font-size: 12px; }
+      .modal-backdrop { padding: 8px; }
+      .modal { padding: 15px; max-height: calc(100dvh - 16px); }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <div class="brand"><div class="brand-mark">汤</div><div><strong>汤圆记账</strong><small>PERSONAL LEDGER</small></div></div>
+      <div class="nav-label">工作台</div>
+      <nav class="nav">
+        <button class="active" data-page="overview"><span aria-hidden="true">🏡</span>总览</button>
+        <button data-page="transactions"><span aria-hidden="true">🧾</span>收支明细</button>
+        <button data-page="accounts"><span aria-hidden="true">💳</span>账户管理</button>
+        <button data-page="debts"><span aria-hidden="true">🤝</span>借款与分期</button>
+      </nav>
+      <div class="side-bottom"><div class="privacy"><b>◉ 数据只保存在本机</b>账本内容存储在当前浏览器中。建议定期导出备份，清理浏览器数据前请先备份。</div></div>
+    </aside>
+    <main>
+      <header class="topbar">
+        <div><div class="eyebrow" id="today"></div><h1 id="pageTitle">收支总览</h1></div>
+        <div class="top-actions">
+          <button class="button" id="exportBtn">导出备份</button>
+          <button class="button" id="importBtn">导入备份</button>
+          <button class="button primary" id="quickAdd">＋ 记一笔</button>
+          <input id="importFile" type="file" accept="application/json,.json" hidden>
+        </div>
+      </header>
+      <section class="page active" id="page-overview">
+        <div class="wallet-tabs"><span class="selected">钱包</span></div>
+        <div class="wallet-summary">
+          <div class="wallet-total"><div class="wallet-total-label">总资产　ⓘ</div><div class="wallet-total-value" id="netWorth">¥0.00</div><div class="wallet-total-sub">投资 <span id="investmentTotal">¥0.00</span></div></div>
+          <div class="wallet-total"><div class="wallet-total-label">总存款</div><div class="wallet-total-value" id="assetTotal">¥0.00</div><div class="wallet-total-sub">手头现金 <span id="cashTotalSummary">¥0.00</span></div></div>
+        </div>
+        <section class="money-shelf">
+          <div class="shelf-head"><span>我拥有的人民币现金</span><span id="cashAccountName">纸币现金</span></div>
+          <div class="cash-display"><div class="cash-caption">现金余额</div><div class="cash-amount" id="cashTotal">¥0.00</div><div class="cash-foot"><span>现金占总存款</span><span id="cashShare">0%</span></div></div>
+          <div class="cash-meter"><div class="cash-meter-fill" id="cashMeter"></div></div>
+          <div class="cash-meter-note" id="cashMeterNote">滑动纸币或硬币可触发趣味动画，不会改变余额；点击「复原」可重新展示</div>
+          <div class="banknote-groups" id="banknotes"></div>
+          <div class="coin-groups" id="coins"></div>
+        </section>
+        <button class="cash-add" id="cashAdd" aria-label="记一笔">+</button>
+        <div class="stats">
+          <button class="stat stat-action" type="button" data-month-detail="income" aria-label="查看本月收入明细"><span class="stat-title">本月收入 <span>↗</span></span><span class="stat-number income" id="monthIncome">¥0.00</span><span class="stat-note">含借入款、收回借款 · 点击查看明细</span></button>
+          <button class="stat stat-action" type="button" data-month-detail="expense" aria-label="查看本月支出明细"><span class="stat-title">本月支出 <span>↘</span></span><span class="stat-number expense" id="monthExpense">¥0.00</span><span class="stat-note">含实际支出及本月到期未还分期 · 点击查看</span></button>
+          <button class="stat stat-action" type="button" data-month-detail="balance" aria-label="查看本月结余明细"><span class="stat-title">本月结余 <span>＝</span></span><span class="stat-number" id="monthBalance">¥0.00</span><span class="stat-note" id="monthName"></span></button>
+        </div>
+        <div class="grid-two">
+          <section class="panel">
+            <div class="panel-head"><h2>我的账户</h2><button class="text-link" data-go="accounts">管理账户 →</button></div>
+            <div class="account-list" id="overviewAccounts"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2>近 6 个月收支</h2><div class="legend"><span><i class="dot"></i>收入</span><span><i class="dot out"></i>支出</span></div></div>
+            <div class="chart" id="chart"></div>
+          </section>
+        </div>
+        <section class="panel">
+          <div class="panel-head"><h2>最近记录</h2><button class="text-link" data-go="transactions">全部明细 →</button></div>
+          <div class="transaction-list" id="recentTransactions"></div>
+        </section>
+      </section>
+      <section class="page" id="page-transactions">
+        <section class="panel">
+          <div class="panel-head"><h2>收支明细</h2><div class="section-tools"><select class="field-small" id="txFilter"><option value="all">全部类型</option><option value="income">收入</option><option value="expense">支出</option><option value="transfer">转账</option></select><input class="field-small" id="txMonth" type="month" aria-label="按月份筛选"></div></div>
+          <div class="transaction-list" id="allTransactions"></div>
+        </section>
+      </section>
+      <section class="page" id="page-accounts">
+        <section class="panel">
+          <div class="panel-head"><div><h2>账户管理</h2><div class="stat-note">独立管理现金、支付宝、银行卡等账户余额</div></div><button class="button primary" id="addAccount">＋ 新增账户</button></div>
+          <div class="account-list" id="allAccounts"></div>
+        </section>
+      </section>
+      <section class="page" id="page-debts">
+        <div class="debt-summary">
+          <div class="stat"><div class="stat-title">待还欠款</div><div class="stat-number expense" id="debtOwed">¥0.00</div></div>
+          <div class="stat"><div class="stat-title">待收借出款</div><div class="stat-number income" id="debtLent">¥0.00</div></div>
+          <div class="stat"><div class="stat-title">逾期记录</div><div class="stat-number" id="debtOverdue">0 笔</div></div>
+        </div>
+        <section class="panel">
+          <div class="panel-head"><div><h2>借款与分期</h2><div class="stat-note">记录借款时间、还款期限、每期金额和还款进度</div></div><button class="button primary" id="addDebt">＋ 新增记录</button></div>
+          <div class="debt-list" id="debtList"></div>
+        </section>
+      </section>
+    </main>
+  </div>
+  <div class="modal-backdrop" id="modalBackdrop"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-head"><h2 id="modalTitle"></h2><button class="close" id="closeModal" aria-label="关闭">×</button></div><div id="modalBody"></div></div></div>
+  <div id="toast" role="status"></div>
+  <script>
+    (() => {
+      "use strict";
+      const STORAGE_KEY = "shiji-ledger-v1";
+      const money = value => "¥" + Number(value || 0).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const localDate = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      const localDateTime = date => `${localDate(date)}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+      const today = () => localDate(new Date());
+      const makeId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      const initialState = () => ({
+        accounts: [{ id: "cash", name: "纸币现金", type: "现金", opening: 0 }],
+        transactions: [],
+        debts: []
+      });
+      let state;
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        state = saved ? JSON.parse(saved) : initialState();
+        if (!state || !Array.isArray(state.accounts) || !Array.isArray(state.transactions) || !Array.isArray(state.debts)) throw new Error("账本数据格式不正确");
+        if (!state.accounts.length) state.accounts.push(...initialState().accounts);
+      } catch (error) {
+        console.error("读取账本失败：", error);
+        state = initialState();
+        setTimeout(() => toast("读取本地账本失败，已打开空白账本；原数据未被覆盖，请检查浏览器存储。"), 50);
+      }
+      const persist = () => {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+        catch (error) { console.error("保存账本失败：", error); toast("保存失败，可能是浏览器存储空间不足。请先导出备份。"); }
+      };
+      const accountById = id => state.accounts.find(a => a.id === id);
+      const accountBalance = id => {
+        const account = accountById(id);
+        if (!account) return 0;
+        return Number(account.opening || 0) + state.transactions.reduce((sum, t) => {
+          if (t.type === "transfer") return sum + (t.accountId === id ? -Number(t.amount) : t.toAccountId === id ? Number(t.amount) : 0);
+          return sum + (t.accountId === id ? (t.type === "income" ? Number(t.amount) : -Number(t.amount)) : 0);
+        }, 0);
+      };
+      const debtPaid = debt => (debt.payments || []).reduce((sum, p) => sum + Number(p.amount), 0);
+      const debtRemaining = debt => Math.max(0, Number(debt.amount) - debtPaid(debt));
+      const fmtDate = value => {
+        const match = typeof value === "string" && value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) return "未设置";
+        const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+        if (date.getFullYear() !== Number(match[1]) || date.getMonth() !== Number(match[2]) - 1 || date.getDate() !== Number(match[3])) return "未设置";
+        return `${match[1]}年${match[2]}月${match[3]}日`;
+      };
+      const fmtDateTime = (dateTime, date) => {
+        const match = typeof dateTime === "string" && dateTime.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+        if (!match) return `${fmtDate(date)} · 时间未记录`;
+        const parsed = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]));
+        if (parsed.getFullYear() !== Number(match[1]) || parsed.getMonth() !== Number(match[2]) - 1 || parsed.getDate() !== Number(match[3]) || parsed.getHours() !== Number(match[4]) || parsed.getMinutes() !== Number(match[5])) return `${fmtDate(date)} · 时间未记录`;
+        return `${fmtDate(match[1] + "-" + match[2] + "-" + match[3])} ${match[4]}:${match[5]}`;
+      };
+      const isValidDateTime = value => {
+        const match = typeof value === "string" && value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+        if (!match) return false;
+        const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]));
+        return date.getFullYear() === Number(match[1]) && date.getMonth() === Number(match[2]) - 1 && date.getDate() === Number(match[3]) && date.getHours() === Number(match[4]) && date.getMinutes() === Number(match[5]);
+      };
+      const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+      const toast = message => {
+        const el = document.getElementById("toast"); el.textContent = message; el.classList.add("show");
+        clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.remove("show"), 2600);
+      };
+      const setPage = page => {
+        document.querySelectorAll(".page").forEach(el => el.classList.toggle("active", el.id === "page-" + page));
+        document.querySelectorAll(".nav button").forEach(el => el.classList.toggle("active", el.dataset.page === page));
+        document.getElementById("pageTitle").textContent = ({ overview: "收支总览", transactions: "收支明细", accounts: "账户管理", debts: "借款与分期" })[page];
+        document.getElementById("cashAdd").hidden = page !== "overview";
+      };
+      const accountMarkup = account => {
+        const icons = { 现金: "💵", 支付宝: "🔷", 微信: "💬", 银行卡: "💳", 信用卡: "💳", 投资: "📈", 其他: "👛" };
+        return `<button type="button" class="account-card" data-account-details="${escapeHtml(account.id)}" aria-label="查看${escapeHtml(account.name)}的收支明细"><span class="account-top"><span class="account-icon" aria-hidden="true">${icons[account.type] || "👛"}</span><span>${escapeHtml(account.name)}</span></span><span class="account-amount">${money(accountBalance(account.id))}</span><span class="stat-note">点击查看收支明细 →</span></button>`;
+      };
+      const accountManagementMarkup = account => `<div class="account-management-item">${accountMarkup(account)}<div class="account-management-actions"><button class="tx-edit" data-edit-account="${escapeHtml(account.id)}" aria-label="编辑${escapeHtml(account.name)}">编辑</button>${account.id === "cash" ? '<span class="stat-note">默认账户不可删除</span>' : `<button class="tx-edit danger" data-delete-account="${escapeHtml(account.id)}" aria-label="删除${escapeHtml(account.name)}">删除</button>`}</div></div>`;
+      const txMarkup = (t, editable = false) => {
+        const isTransfer = t.type === "transfer", isIncome = t.type === "income";
+        const account = accountById(t.accountId);
+        const title = t.note || t.category || (isTransfer ? "账户转账" : isIncome ? "收入" : "支出");
+        const icons = { 餐饮: "🍜", 日用: "🧴", 交通: "🚇", 购物: "🛍️", 住房: "🏠", 医疗: "💊", 工资: "💰", 还款: "💳", 收回借款: "🤝", 借入款: "🤲", 借出款: "🫴" };
+        const icon = isTransfer ? "🔁" : icons[t.category] || (isIncome ? "💵" : "🧾");
+        const amountText = isTransfer ? `${escapeHtml(account?.name || "账户")} → ${escapeHtml(accountById(t.toAccountId)?.name || "账户")}　${money(t.amount)}` : `${isIncome ? "+" : "−"}${money(t.amount)}`;
+        const actions = editable && !t.debtId ? `
+          <button class="tx-edit" data-edit-transaction="${escapeHtml(t.id)}" aria-label="编辑${escapeHtml(title)}">编辑</button>
+          <button class="tx-edit danger" data-delete-transaction="${escapeHtml(t.id)}" aria-label="删除${escapeHtml(title)}">删除</button>
+        ` : "";
+        return `<div class="transaction"><div class="tx-icon ${isTransfer ? "" : isIncome ? "in" : "out"}" aria-hidden="true">${icon}</div><div><div class="tx-title">${escapeHtml(title)}</div><div class="tx-meta">${fmtDateTime(t.dateTime, t.date)} · ${escapeHtml(account?.name || "账户已删除")}${t.category && t.note ? " · " + escapeHtml(t.category) : ""}</div></div><div class="tx-actions"><div class="tx-amount ${isTransfer ? "" : isIncome ? "in" : "out"}">${amountText}</div>${actions}</div></div>`;
+      };
+      function renderCash(cashAccount) {
+        const cash = cashAccount ? accountBalance(cashAccount.id) : 0;
+        const deposits = state.accounts.reduce((sum, account) => sum + accountBalance(account.id), 0);
+        const share = deposits > 0 ? Math.max(0, Math.min(100, cash / deposits * 100)) : 0;
+        document.getElementById("cashTotal").textContent = money(cash);
+        document.getElementById("cashTotalSummary").textContent = money(cash);
+        document.getElementById("cashShare").textContent = `${share.toFixed(share % 1 ? 1 : 0)}%`;
+        document.getElementById("cashMeter").style.width = `${share}%`;
+        document.getElementById("cashAccountName").textContent = cashAccount ? cashAccount.name : "未设置现金账户";
+        const groups = [
+          { cents: 10000, value: "100", upper: "壹佰圆", color: "landmark" },
+          { cents: 5000, value: "50", upper: "伍拾圆", color: "orange" },
+          { cents: 2000, value: "20", upper: "贰拾圆", color: "green" },
+          { cents: 1000, value: "10", upper: "拾圆", color: "teal" },
+          { cents: 500, value: "5", upper: "伍圆", color: "olive" },
+          { cents: 100, value: "1", upper: "壹圆", color: "small-green" }
+        ];
+        let remaining = Math.max(0, Math.round(cash * 100));
+        const bills = [];
+        for (const denomination of groups) {
+          const count = Math.floor(remaining / denomination.cents);
+          remaining %= denomination.cents;
+          if (!count) continue;
+          const shown = Math.min(count, 100);
+          const layers = Array.from({ length: shown }, (_, index) => `<div class="banknote ${denomination.color}" tabindex="0" role="img" aria-label="${denomination.value}元纸币，可滑动取出，代表${count}张" title="滑动取出纸币，余额不变" data-layer="${index}" data-denomination="${denomination.value}" style="top:${Math.min((shown - index - 1) * 1.3, 64)}px;left:calc(8% + ${(shown - index - 1) * .3}px);right:calc(8% + ${(shown - index - 1) * .3}px);z-index:${index}"><span class="bill-fibers"></span><span class="bill-thread"></span><span class="bill-security">¥</span><span class="bill-seal">汤圆记账</span><span class="bill-watermark">汤</span><svg class="bill-landmark" viewBox="0 0 170 79" aria-hidden="true"><path d="M2 68 20 53l11 5 25-31 14 15 16-23 17 28 13-12 25 23 13 10M4 70h162M8 63l12-9m11 3 25-29m0 9 14 13m2-16 16-21m1 8 16 26m1-4 13-12m0 8 24 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M57 52h25M61 46l8-9 8 9M63 52v13m13-13v13M55 66h29M64 40h12m-9-4h6m-10 20h14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M7 72c17-5 27-4 40 0s23 4 38 0 29-4 42 0 20 3 34 0M10 76c16-4 26-3 38 0s22 3 35 0 27-3 39 0 20 3 32 0" fill="none" stroke="currentColor" stroke-width=".8"/><path d="M18 56 31 43m-2 15 15-16m12-8 8-10m11 17 10 9m4-15 12-15m8 28 11 8m12-9 12 13" fill="none" stroke="currentColor" stroke-width=".65"/><circle cx="148" cy="20" r="7" fill="none" stroke="currentColor" stroke-width="1"/><circle cx="148" cy="20" r="4" fill="none" stroke="currentColor" stroke-width=".7"/></svg><span class="bill-value">${denomination.value}</span><span class="bill-unit">${denomination.upper}</span><span class="bill-disclaimer">汤圆记账 · 记账展示</span><span class="bill-paper-edge"></span></div>`).join("");
+          const noteHeight = window.matchMedia("(max-width: 620px)").matches ? 139 : 166;
+          const stackHeight = noteHeight + Math.min(Math.max(0, shown - 1) * 1.3, 64);
+          const noteLabel = `${count} 张 × ¥${denomination.value} = ${money(count * Number(denomination.value))}`;
+          bills.push(`<div class="denomination-group" data-total="${count}" data-remaining="${shown}"><div class="denomination-head"><b>${denomination.value} 元纸币</b><div class="denomination-control"><span class="denomination-status">${noteLabel}</span><button class="restore-bills" data-restore-bills hidden>复原</button></div></div><div class="banknote-stack" data-denomination="${denomination.value}" data-note-height="${noteHeight}" style="height:${stackHeight}px" aria-label="${denomination.value}元纸币 ${count}张">${layers}</div></div>`);
+        }
+        const coins = [
+          { cents: 100, value: "1元", color: "" },
+          { cents: 50, value: "5角", color: "silver" },
+          { cents: 10, value: "1角", color: "silver" },
+          { cents: 5, value: "5分", color: "silver" },
+          { cents: 1, value: "1分", color: "silver" }
+        ];
+        const coinItems = [];
+        for (const coin of coins) {
+          const count = Math.floor(remaining / coin.cents);
+          remaining %= coin.cents;
+          if (count) coinItems.push(`<div class="coin-chip ${coin.color}" tabindex="0" role="img" aria-label="${coin.value}硬币，可滑动取出，共${count}枚" data-value="${coin.cents / 100}" data-label="${coin.value}" data-remaining="${count}" title="滑动取出硬币，余额不变"><span class="coin-face">${coin.value}</span><span>${count} 枚</span></div>`);
+        }
+        document.getElementById("banknotes").innerHTML = bills.length ? bills.join("") : '<div class="empty">还没有整元纸币</div>';
+        document.getElementById("coins").innerHTML = `${coinItems.length ? '<div class="denomination-control coin-control"><span class="denomination-status">零钱</span><button class="restore-bills" data-restore-coins hidden>复原零钱</button></div>' : ""}${coinItems.join("")}`;
+        document.getElementById("cashMeterNote").textContent = cash < 0 ? "现金账户余额为负，无法换算为纸币" : "滑动纸币或硬币可触发趣味动画，不会改变余额；点击「复原」可重新展示";
+      }
+      const dateKey = value => typeof value === "string" ? value : "";
+      const installmentScheduleFields = (frequency, installmentDay, installmentWeekday) => `
+        <div class="form-field" id="installmentDayField" ${frequency === "weekly" ? "hidden" : ""}><label>每月还款日</label><input name="installmentDay" type="number" min="1" max="31" value="${escapeHtml(installmentDay)}"></div>
+        <div class="form-field" id="installmentWeekdayField" ${frequency === "weekly" ? "" : "hidden"}><label>每周还款日</label><select name="installmentWeekday">${["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"].map((day, value) => `<option value="${value}" ${Number(installmentWeekday) === value ? "selected" : ""}>${day}</option>`).join("")}</select></div>`;
+      const scheduledInstallmentsInMonth = (debt, month) => {
+        const amount = Number(debt.installment);
+        if (debt.kind !== "borrow" || !Number.isFinite(amount) || amount <= 0 || !/^\d{4}-\d{2}$/.test(month)) return [];
+        const start = dateKey(debt.borrowedAt);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) return [];
+        const [year, monthNumber] = month.split("-").map(Number);
+        const firstOfMonth = new Date(year, monthNumber - 1, 1);
+        const lastOfMonth = new Date(year, monthNumber, 0);
+        const firstDate = localDate(firstOfMonth);
+        const lastDate = localDate(lastOfMonth);
+        const nextMonthStart = localDate(new Date(Number(start.slice(0, 4)), Number(start.slice(5, 7)), 1));
+        const firstWeeklyDue = localDate(new Date(Number(start.slice(0, 4)), Number(start.slice(5, 7)) - 1, Number(start.slice(8)) + 7));
+        const dueDates = [];
+        for (let day = 1; day <= lastOfMonth.getDate(); day++) {
+          const date = localDate(new Date(year, monthNumber - 1, day));
+          if (date <= start || (debt.dueDate && date > debt.dueDate)) continue;
+          if (debt.frequency === "weekly") {
+            const weekday = Number.isInteger(debt.installmentWeekday) ? debt.installmentWeekday : new Date(Number(start.slice(0, 4)), Number(start.slice(5, 7)) - 1, Number(start.slice(8))).getDay();
+            if (date >= firstWeeklyDue && Number.isInteger(weekday) && weekday >= 0 && weekday <= 6 && new Date(year, monthNumber - 1, day).getDay() === weekday) dueDates.push(date);
+          } else {
+            const dueDay = Number(debt.installmentDay) || Number(start.slice(8));
+            const actualDueDay = Math.min(dueDay, lastOfMonth.getDate());
+            if (date >= nextMonthStart && day === actualDueDay) dueDates.push(date);
+          }
+        }
+        return dueDates;
+      };
+      const scheduledExpenseItemsForMonth = month => state.debts.flatMap(debt => {
+        const dueDates = scheduledInstallmentsInMonth(debt, month);
+        if (!dueDates.length) return [];
+        const monthStart = `${month}-01`;
+        const nextMonthStart = localDate(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1));
+        const paidBeforeMonth = (debt.payments || []).filter(payment => dateKey(payment.date) < monthStart).reduce((sum, payment) => sum + Number(payment.amount), 0);
+        const paidThisMonth = (debt.payments || []).filter(payment => dateKey(payment.date) >= monthStart && dateKey(payment.date) < nextMonthStart).reduce((sum, payment) => sum + Number(payment.amount), 0);
+        const principalAtMonthStart = Math.max(0, Number(debt.amount) - paidBeforeMonth);
+        const scheduledAmount = Math.min(principalAtMonthStart, Number(debt.installment) * dueDates.length);
+        const outstanding = Math.max(0, scheduledAmount - paidThisMonth);
+        return outstanding ? [{ debt, dueDates, amount: outstanding, scheduledAmount, paidThisMonth }] : [];
+      });
+      const scheduledExpenseForMonth = month => scheduledExpenseItemsForMonth(month).reduce((total, item) => total + item.amount, 0);
+      function render() {
+        const now = new Date(), month = localDate(now).slice(0, 7);
+        document.getElementById("today").textContent = now.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" });
+        document.getElementById("monthName").textContent = now.toLocaleDateString("zh-CN", { month: "long" }) + "收支情况";
+        const assets = state.accounts.reduce((s, a) => s + accountBalance(a.id), 0);
+        const owed = state.debts.filter(d => d.kind === "borrow").reduce((s, d) => s + debtRemaining(d), 0);
+        const lent = state.debts.filter(d => d.kind === "lend").reduce((s, d) => s + debtRemaining(d), 0);
+        const cashAccount = accountById("cash") || state.accounts.find(a => a.type === "现金");
+        const investments = state.accounts.filter(a => a.type === "投资").reduce((s, a) => s + accountBalance(a.id), 0);
+        document.getElementById("assetTotal").textContent = money(assets);
+        document.getElementById("investmentTotal").textContent = money(investments);
+        document.getElementById("netWorth").textContent = money(assets - owed + lent);
+        renderCash(cashAccount);
+        const monthTx = state.transactions.filter(t => dateKey(t.date).slice(0, 7) === month);
+        const income = monthTx.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
+        const expense = monthTx.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0) + scheduledExpenseForMonth(month);
+        document.getElementById("monthIncome").textContent = money(income);
+        document.getElementById("monthExpense").textContent = money(expense);
+        document.getElementById("monthBalance").textContent = money(income - expense);
+        document.getElementById("overviewAccounts").innerHTML = state.accounts.map(accountMarkup).join("");
+        document.getElementById("allAccounts").innerHTML = state.accounts.map(accountManagementMarkup).join("");
+        const sortedTx = [...state.transactions].sort((a, b) => String(b.dateTime || dateKey(b.date)).localeCompare(String(a.dateTime || dateKey(a.date))) || String(b.id).localeCompare(String(a.id)));
+        document.getElementById("recentTransactions").innerHTML = sortedTx.length ? sortedTx.slice(0, 5).map(txMarkup).join("") : '<div class="empty">还没有收支记录，点击右上角「记一笔」开始吧</div>';
+        const filter = document.getElementById("txFilter").value, filterMonth = document.getElementById("txMonth").value;
+        const filteredTx = sortedTx.filter(t => (filter === "all" || t.type === filter) && (!filterMonth || dateKey(t.date).startsWith(filterMonth)));
+        document.getElementById("allTransactions").innerHTML = filteredTx.length ? filteredTx.map(t => txMarkup(t, true)).join("") : '<div class="empty">没有符合条件的记录</div>';
+        const chartEl = document.getElementById("chart");
+        const months = Array.from({ length: 6 }, (_, i) => { const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; });
+        const sums = months.map(m => {
+          const list = state.transactions.filter(t => dateKey(t.date).startsWith(m));
+          return [list.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0), list.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0) + scheduledExpenseForMonth(m)];
+        });
+        const max = Math.max(1, ...sums.flat());
+        chartEl.innerHTML = months.map((m, i) => `<div class="chart-col"><div class="bar-wrap"><i class="bar" title="收入 ${money(sums[i][0])}" style="height:${Math.max(3, sums[i][0] / max * 100)}%"></i><i class="bar out" title="支出 ${money(sums[i][1])}" style="height:${Math.max(3, sums[i][1] / max * 100)}%"></i></div>${Number(m.slice(5))}月</div>`).join("");
+        renderDebts(owed, lent);
+      }
+      function renderDebts(owed, lent) {
+        const overdue = state.debts.filter(d => debtRemaining(d) > 0 && d.dueDate && d.dueDate < today()).length;
+        document.getElementById("debtOwed").textContent = money(owed);
+        document.getElementById("debtLent").textContent = money(lent);
+        document.getElementById("debtOverdue").textContent = overdue + " 笔";
+        const list = [...state.debts].sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"));
+        document.getElementById("debtList").innerHTML = list.length ? list.map(d => {
+          const remaining = debtRemaining(d), isBorrow = d.kind === "borrow";
+          const overdueFlag = remaining > 0 && d.dueDate && d.dueDate < today();
+          const paid = (d.payments || []).map(p => `${fmtDateTime(p.dateTime, p.date)} ${money(p.amount)}`).join("、");
+          return `<article class="debt-card"><div><div class="debt-title"><span class="debt-kind ${isBorrow ? "" : "lend"}">${isBorrow ? "我借入" : "我借出"}</span>${escapeHtml(d.name)}</div><div class="debt-meta">借款时间：${fmtDateTime(d.borrowedAtDateTime, d.borrowedAt)}　·　本金：${money(d.amount)}<br>到期还款：<span style="color:${overdueFlag ? "var(--red)" : "inherit"}">${fmtDate(d.dueDate)}${overdueFlag ? "（已逾期）" : ""}</span>${d.installment ? `　·　每期 ${money(d.installment)}${d.frequency === "weekly" ? " / 周" : " / 月"}` : ""}${d.note ? `<br>备注：${escapeHtml(d.note)}` : ""}${paid ? `<br>已登记：${paid}` : ""}</div></div><div class="debt-right"><div class="debt-balance">${money(remaining)}<small>${remaining === 0 ? "已结清" : "剩余未还"}</small></div><div class="debt-actions"><button class="button subtle" data-edit-debt="${escapeHtml(d.id)}">编辑</button>${remaining > 0 ? `<button class="button" data-repay="${escapeHtml(d.id)}">${isBorrow ? "登记还款" : "登记收款"}</button>` : ""}<button class="button subtle danger" data-delete-debt="${escapeHtml(d.id)}" aria-label="删除记录">删除</button></div></div></article>`;
+        }).join("") : '<div class="empty">暂无借款或分期记录</div>';
+      }
+      const accountOptions = selected => state.accounts.map(a => `<option value="${escapeHtml(a.id)}" ${a.id === selected ? "selected" : ""}>${escapeHtml(a.name)}</option>`).join("");
+      function openModal(title, content, onSubmit) {
+        const backdrop = document.getElementById("modalBackdrop");
+        document.getElementById("modalTitle").textContent = title;
+        document.getElementById("modalBody").innerHTML = content;
+        backdrop.classList.add("open");
+        const form = document.getElementById("modalForm");
+        if (form) form.addEventListener("submit", event => { event.preventDefault(); onSubmit(new FormData(form)); });
+        const first = backdrop.querySelector("input,select,button");
+        if (first) first.focus();
+      }
+      function closeModal() { document.getElementById("modalBackdrop").classList.remove("open"); }
+      function openAccountDetails(accountId) {
+        const account = accountById(accountId);
+        if (!account) { toast("账户不存在或已删除"); return; }
+        const transactions = state.transactions
+          .filter(t => t.accountId === accountId || (t.type === "transfer" && t.toAccountId === accountId))
+          .sort((a, b) => String(b.dateTime || dateKey(b.date)).localeCompare(String(a.dateTime || dateKey(a.date))) || String(b.id).localeCompare(String(a.id)));
+        const totals = transactions.reduce((summary, transaction) => {
+          if (transaction.type === "transfer") {
+            if (transaction.accountId === accountId) summary.expense += Number(transaction.amount);
+            else summary.income += Number(transaction.amount);
+          } else if (transaction.type === "income") summary.income += Number(transaction.amount);
+          else summary.expense += Number(transaction.amount);
+          return summary;
+        }, { income: 0, expense: 0 });
+        const rows = transactions.map(transaction => {
+          if (transaction.type !== "transfer" || transaction.accountId === accountId) return txMarkup(transaction);
+          return txMarkup({ ...transaction, accountId: transaction.toAccountId, toAccountId: transaction.accountId });
+        }).join("");
+        openModal(`${account.name} · 收支明细`, `<div class="account-details-summary">
+          <div class="account-details-stat"><span>当前余额</span><strong>${money(accountBalance(accountId))}</strong></div>
+          <div class="account-details-stat income"><span>累计收入 / 转入</span><strong>${money(totals.income)}</strong></div>
+          <div class="account-details-stat expense"><span>累计支出 / 转出</span><strong>${money(totals.expense)}</strong></div>
+        </div><div class="transaction-list account-details-list">${rows || '<div class="empty">该账户还没有收支记录</div>'}</div>`);
+      }
+      function openMonthDetails(kind) {
+        const month = localDate(new Date()).slice(0, 7);
+        const monthLabel = `${month.slice(0, 4)}年${Number(month.slice(5, 7))}月`;
+        const transactions = state.transactions.filter(transaction => dateKey(transaction.date).startsWith(month));
+        const incomes = transactions.filter(transaction => transaction.type === "income");
+        const expenses = transactions.filter(transaction => transaction.type === "expense");
+        const incomeTotal = incomes.reduce((total, transaction) => total + Number(transaction.amount), 0);
+        const actualExpenseTotal = expenses.reduce((total, transaction) => total + Number(transaction.amount), 0);
+        const scheduledItems = scheduledExpenseItemsForMonth(month);
+        const scheduledTotal = scheduledItems.reduce((total, item) => total + item.amount, 0);
+        const expenseTotal = actualExpenseTotal + scheduledTotal;
+        const renderTransactions = items => [...items]
+          .sort((a, b) => String(b.dateTime || dateKey(b.date)).localeCompare(String(a.dateTime || dateKey(a.date))) || String(b.id).localeCompare(String(a.id)))
+          .map(transaction => txMarkup(transaction))
+          .join("");
+        const plannedRows = scheduledItems.map(({ debt, dueDates, amount, scheduledAmount: dueAmount, paidThisMonth }) => `
+          <div class="transaction"><div class="tx-icon out" aria-hidden="true">📅</div><div><div class="tx-title">${escapeHtml(debt.name)} · 本月到期分期</div><div class="tx-meta">到期：${dueDates.map(fmtDate).join("、")} · 应还 ${money(dueAmount)}${paidThisMonth ? ` · 已登记 ${money(paidThisMonth)}` : ""} · 尚未登记</div></div><div class="tx-amount out">${money(amount)}</div></div>
+        `).join("");
+        const section = (title, total, rows, emptyText) => `<section><div class="panel-head"><h2>${title}</h2><strong>${money(total)}</strong></div><div class="transaction-list">${rows || `<div class="empty">${emptyText}</div>`}</div></section>`;
+        let content;
+        if (kind === "income") {
+          content = section("收入明细", incomeTotal, renderTransactions(incomes), "本月暂无收入记录");
+        } else if (kind === "expense") {
+          content = section("实际支出", actualExpenseTotal, renderTransactions(expenses), "本月暂无实际支出") + section("到期未还分期", scheduledTotal, plannedRows, "本月没有尚未登记的到期分期");
+        } else {
+          content = `<div class="account-details-summary"><div class="account-details-stat income"><span>本月收入</span><strong>${money(incomeTotal)}</strong></div><div class="account-details-stat expense"><span>本月支出</span><strong>${money(expenseTotal)}</strong></div><div class="account-details-stat"><span>本月结余</span><strong>${money(incomeTotal - expenseTotal)}</strong></div></div>${section("收入明细", incomeTotal, renderTransactions(incomes), "本月暂无收入记录")}${section("实际支出", actualExpenseTotal, renderTransactions(expenses), "本月暂无实际支出")}${section("到期未还分期", scheduledTotal, plannedRows, "本月没有尚未登记的到期分期")}`;
+        }
+        openModal(`${monthLabel} · ${kind === "income" ? "收入" : kind === "expense" ? "支出" : "结余"}明细`, `<div class="account-details-list">${content}</div>`);
+      }
+      function deleteTransaction(transactionId) {
+        const transaction = state.transactions.find(t => t.id === transactionId);
+        if (!transaction) return;
+        if (transaction.debtId) { toast("借款相关记录不能直接删除，请在借款页处理"); return; }
+        if (!confirm(`删除记录：${transaction.note || transaction.category || "此笔记录"}？此操作不可撤销。`)) return;
+        state.transactions = state.transactions.filter(t => t.id !== transactionId);
+        persist(); render(); toast("记录已删除");
+      }
+      function addTransaction(prefill = {}, transaction = null) {
+        if (!state.accounts.length) { toast("请先创建一个账户"); setPage("accounts"); return; }
+        const initial = transaction || prefill;
+        const initialType = ["income", "expense", "transfer"].includes(initial.type) ? initial.type : "expense";
+        const dateTime = transaction ? (transaction.dateTime || "") : initial.date ? `${initial.date}T${localDateTime(new Date()).slice(11)}` : localDateTime(new Date());
+        const categories = ["餐饮", "日用", "交通", "购物", "住房", "医疗", "工资", "其他"];
+        if (initial.category && !categories.includes(initial.category)) categories.push(initial.category);
+        const categoryOptions = categories.map(category => `<option ${category === initial.category ? "selected" : ""}>${escapeHtml(category)}</option>`).join("");
+        openModal(transaction ? "编辑收支明细" : "记一笔", `<form id="modalForm"><div class="form-grid">
+          <div class="form-field full"><label>记录类型</label><div class="type-switch"><button type="button" class="${initialType === "expense" ? "selected" : ""}" data-type="expense">支出</button><button type="button" class="${initialType === "income" ? "selected" : ""}" data-type="income">收入</button><button type="button" class="${initialType === "transfer" ? "selected" : ""}" data-type="transfer">转账</button></div><input type="hidden" name="type" value="${initialType}"></div>
+          <div class="form-field"><label>金额（元）</label><input name="amount" type="number" min="0.01" step="0.01" required placeholder="0.00" value="${escapeHtml(initial.amount ?? "")}"></div>
+          <div class="form-field"><label>日期和时间（精确到分钟）</label><input name="dateTime" type="datetime-local" value="${escapeHtml(dateTime)}" required>${transaction && !transaction.dateTime ? '<div class="stat-note">这条旧记录没有保存过时间，请填写后再保存。</div>' : ""}</div>
+          <div class="form-field"><label id="accountLabel">${initialType === "transfer" ? "转出账户" : initialType === "income" ? "收入账户" : "付款账户"}</label><select name="accountId">${accountOptions(initial.accountId || state.accounts[0].id)}</select></div>
+          <div class="form-field" id="toAccountField" ${initialType === "transfer" ? "" : "hidden"}><label>转入账户</label><select name="toAccountId">${accountOptions(initial.toAccountId || state.accounts[1]?.id || state.accounts[0].id)}</select></div>
+          <div class="form-field" id="categoryField" ${initialType === "transfer" ? "hidden" : ""}><label>分类</label><select name="category">${categoryOptions}</select></div>
+          <div class="form-field full"><label>备注（选填）</label><input name="note" maxlength="100" placeholder="写点说明…" value="${escapeHtml(initial.note || "")}"></div>
+        </div><div class="form-actions"><button type="button" class="button" data-cancel>取消</button><button class="button primary">${transaction ? "保存修改" : "保存记录"}</button></div></form>`, data => {
+          const type = data.get("type"), amount = Number(data.get("amount")), accountId = data.get("accountId"), toAccountId = data.get("toAccountId"), dateTimeValue = String(data.get("dateTime") || "");
+          if (!["income", "expense", "transfer"].includes(type) || !Number.isFinite(amount) || amount <= 0 || !accountById(accountId) || !isValidDateTime(dateTimeValue) || (type === "transfer" && (!accountById(toAccountId) || toAccountId === accountId))) { toast("请检查金额、日期时间和账户"); return; }
+          const date = dateTimeValue.slice(0, 10);
+          if (transaction) {
+            const index = state.transactions.findIndex(t => t.id === transaction.id);
+            if (index < 0) { toast("这条记录已不存在，请刷新后重试"); return; }
+            const updated = { ...state.transactions[index], type, amount, accountId, category: type === "transfer" ? "" : data.get("category"), note: String(data.get("note") || "").trim(), date, dateTime: dateTimeValue };
+            if (type === "transfer") updated.toAccountId = toAccountId;
+            else delete updated.toAccountId;
+            state.transactions[index] = updated;
+          } else {
+            state.transactions.push({ id: makeId(), type, amount, accountId, ...(type === "transfer" ? { toAccountId } : {}), category: data.get("category"), note: String(data.get("note") || "").trim(), date, dateTime: dateTimeValue });
+          }
+          persist(); closeModal(); render(); toast(transaction ? "修改已保存" : "已保存");
+        });
+        const form = document.getElementById("modalForm");
+        form.querySelectorAll("[data-type]").forEach(button => button.addEventListener("click", () => {
+          form.querySelectorAll("[data-type]").forEach(b => b.classList.toggle("selected", b === button));
+          form.elements.type.value = button.dataset.type;
+          const transfer = button.dataset.type === "transfer";
+          document.getElementById("toAccountField").hidden = !transfer;
+          document.getElementById("categoryField").hidden = transfer;
+          document.getElementById("accountLabel").textContent = transfer ? "转出账户" : button.dataset.type === "income" ? "收入账户" : "付款账户";
+        }));
+        form.querySelector("[data-cancel]").addEventListener("click", closeModal);
+      }
+      function addAccount() {
+        openModal("新增账户", `<form id="modalForm"><div class="form-grid">
+          <div class="form-field full"><label>账户名称</label><input name="name" required maxlength="30" placeholder="例如：招商银行卡"></div>
+          <div class="form-field"><label>账户类型</label><select name="type"><option>现金</option><option>支付宝</option><option>微信</option><option>银行卡</option><option>信用卡</option><option>其他</option></select></div>
+          <div class="form-field"><label>初始余额（元）</label><input name="opening" type="number" step="0.01" value="0" required></div>
+        </div><div class="form-actions"><button type="button" class="button" data-cancel>取消</button><button class="button primary">创建账户</button></div></form>`, data => {
+          const name = String(data.get("name")).trim(), opening = Number(data.get("opening"));
+          if (!name || !Number.isFinite(opening)) { toast("请填写有效的账户信息"); return; }
+          if (state.accounts.some(a => a.name === name)) { toast("已有同名账户"); return; }
+          state.accounts.push({ id: makeId(), name, type: data.get("type"), opening });
+          persist(); closeModal(); render(); toast("账户已创建");
+        });
+        document.querySelector("[data-cancel]").addEventListener("click", closeModal);
+      }
+      function editAccount(id) {
+        const account = accountById(id);
+        if (!account) { toast("账户不存在或已删除"); return; }
+        const types = ["现金", "支付宝", "微信", "银行卡", "信用卡", "投资", "其他"];
+        if (!types.includes(account.type)) types.unshift(account.type);
+        openModal("编辑账户", `<form id="modalForm"><div class="form-grid">
+          <div class="form-field full"><label>账户名称</label><input name="name" required maxlength="30" value="${escapeHtml(account.name)}"></div>
+          <div class="form-field"><label>账户类型</label><select name="type">${types.map(type => `<option ${type === account.type ? "selected" : ""}>${escapeHtml(type)}</option>`).join("")}</select></div>
+          <div class="form-field"><label>初始余额（元）</label><input name="opening" type="number" step="0.01" required value="${escapeHtml(account.opening)}"></div>
+        </div><div class="form-actions"><button type="button" class="button" data-cancel>取消</button><button class="button primary">保存修改</button></div></form>`, data => {
+          const name = String(data.get("name") || "").trim(), opening = Number(data.get("opening"));
+          if (!name || !Number.isFinite(opening)) { toast("请填写有效的账户信息"); return; }
+          if (state.accounts.some(item => item.id !== account.id && item.name === name)) { toast("已有同名账户"); return; }
+          const currentAccount = accountById(id);
+          if (!currentAccount) { toast("账户不存在或已删除"); return; }
+          currentAccount.name = name;
+          currentAccount.type = String(data.get("type"));
+          currentAccount.opening = opening;
+          persist(); closeModal(); render(); toast("账户修改已保存");
+        });
+        document.querySelector("[data-cancel]").addEventListener("click", closeModal);
+      }
+      function deleteAccount(id) {
+        const account = accountById(id);
+        if (!account) { toast("账户不存在或已删除"); return; }
+        if (account.id === "cash") { toast("默认现金账户不能删除"); return; }
+        const hasTransactions = state.transactions.some(transaction => transaction.accountId === id || transaction.toAccountId === id);
+        const hasDebts = state.debts.some(debt => debt.accountId === id);
+        if (hasTransactions || hasDebts) { toast("该账户已关联收支或借款记录，暂不能删除"); return; }
+        if (!confirm(`确定删除账户「${account.name}」？此操作不可撤销。`)) return;
+        state.accounts = state.accounts.filter(item => item.id !== id);
+        persist(); render(); toast("账户已删除");
+      }
+      function addDebt() {
+        if (!state.accounts.length) { toast("请先创建一个账户"); return; }
+        const now = new Date();
+        openModal("新增借款 / 分期", `<form id="modalForm"><div class="form-grid">
+          <div class="form-field full"><label>记录类型</label><div class="type-switch"><button type="button" class="selected" data-kind="borrow">我借入（欠款）</button><button type="button" data-kind="lend">我借出（待收）</button></div><input name="kind" type="hidden" value="borrow"></div>
+          <div class="form-field"><label>对象 / 平台</label><input name="name" required maxlength="50" placeholder="例如：花呗、张先生"></div>
+          <div class="form-field"><label>借款本金（元）</label><input name="amount" type="number" min="0.01" step="0.01" required placeholder="0.00"></div>
+          <div class="form-field"><label>借款日期和时间</label><input name="borrowedAtDateTime" type="datetime-local" value="${localDateTime(new Date())}" required></div>
+          <div class="form-field"><label>到期还款日</label><input name="dueDate" type="date"></div>
+          <div class="form-field"><label>每期金额（选填）</label><input name="installment" type="number" min="0.01" step="0.01" placeholder="如为分期请填写"></div>
+          <div class="form-field"><label>分期频率</label><select name="frequency"><option value="monthly">每月</option><option value="weekly">每周</option></select></div>
+          ${installmentScheduleFields("monthly", now.getDate(), now.getDay())}
+          <div class="form-field full"><label>关联账户</label><select name="accountId">${accountOptions(state.accounts[0].id)}</select></div>
+          <div class="form-field full"><label>备注（选填）</label><input name="note" maxlength="100" placeholder="期数、利息或其他说明"></div>
+          <div class="notice full" id="debtNotice">保存后会自动记入账户余额：借入增加余额，借出扣减余额。每期从下一个周期开始到期；本月到期且尚未登记的借入分期会计入本月支出。</div>
+        </div><div class="form-actions"><button type="button" class="button" data-cancel>取消</button><button class="button primary">保存记录</button></div></form>`, data => {
+          const amount = Number(data.get("amount")), installment = data.get("installment") ? Number(data.get("installment")) : 0;
+          const accountId = data.get("accountId"), kind = data.get("kind"), frequency = data.get("frequency"), borrowedAtDateTime = String(data.get("borrowedAtDateTime") || "");
+          const installmentDay = Number(data.get("installmentDay")), installmentWeekday = Number(data.get("installmentWeekday"));
+          if (!Number.isFinite(amount) || amount <= 0 || (installment && (!Number.isFinite(installment) || installment <= 0)) || (installment && frequency === "monthly" && (!Number.isInteger(installmentDay) || installmentDay < 1 || installmentDay > 31)) || (installment && frequency === "weekly" && (!Number.isInteger(installmentWeekday) || installmentWeekday < 0 || installmentWeekday > 6)) || !accountById(accountId) || !isValidDateTime(borrowedAtDateTime)) { toast("请检查本金、日期时间、分期金额、还款日和账户"); return; }
+          const debt = { id: makeId(), kind, name: String(data.get("name")).trim(), amount, borrowedAt: borrowedAtDateTime.slice(0, 10), borrowedAtDateTime, dueDate: data.get("dueDate"), installment, frequency, ...(installment ? frequency === "monthly" ? { installmentDay } : { installmentWeekday } : {}), accountId, note: String(data.get("note") || "").trim(), payments: [] };
+          state.debts.push(debt);
+          state.transactions.push({ id: makeId(), type: kind === "borrow" ? "income" : "expense", amount, accountId, category: kind === "borrow" ? "借入款" : "借出款", note: `${kind === "borrow" ? "借入" : "借出"}：${debt.name}`, date: debt.borrowedAt, dateTime: borrowedAtDateTime, debtId: debt.id });
+          persist(); closeModal(); render(); toast("借款记录已保存");
+        });
+        const form = document.getElementById("modalForm");
+        const updateScheduleFields = () => {
+          const weekly = form.elements.frequency.value === "weekly";
+          document.getElementById("installmentDayField").hidden = weekly;
+          document.getElementById("installmentWeekdayField").hidden = !weekly;
+        };
+        form.elements.frequency.addEventListener("change", updateScheduleFields);
+        form.querySelectorAll("[data-kind]").forEach(button => button.addEventListener("click", () => {
+          form.querySelectorAll("[data-kind]").forEach(b => b.classList.toggle("selected", b === button));
+          form.elements.kind.value = button.dataset.kind;
+          document.getElementById("debtNotice").textContent = button.dataset.kind === "borrow" ? "保存后会自动记入账户余额：借入增加余额，登记还款时同步扣减余额。" : "保存后会自动记入账户余额：借出扣减余额，登记收款时同步增加余额。";
+        }));
+        form.querySelector("[data-cancel]").addEventListener("click", closeModal);
+      }
+      function editDebt(id) {
+        const debt = state.debts.find(item => item.id === id);
+        if (!debt) { toast("这条借款记录已不存在"); return; }
+        const principalTransaction = state.transactions.find(transaction =>
+          transaction.debtId === debt.id && ["借入款", "借出款"].includes(transaction.category)
+        );
+        if (!principalTransaction) { toast("找不到对应的本金收支记录，无法安全修改"); return; }
+        const dateTimeRequired = Boolean(debt.borrowedAtDateTime);
+        const paid = debtPaid(debt);
+        const frequency = debt.frequency === "weekly" ? "weekly" : "monthly";
+        const borrowedDate = dateKey(debt.borrowedAt) || today();
+        const installmentDay = debt.installmentDay || Number(borrowedDate.slice(8));
+        const installmentWeekday = Number.isInteger(debt.installmentWeekday) ? debt.installmentWeekday : new Date(Number(borrowedDate.slice(0, 4)), Number(borrowedDate.slice(5, 7)) - 1, Number(borrowedDate.slice(8))).getDay();
+        openModal("编辑借款 / 分期", `<form id="modalForm"><div class="form-grid">
+          <div class="form-field full"><label>记录类型</label><div class="type-switch"><button type="button" class="${debt.kind === "borrow" ? "selected" : ""}" data-kind="borrow">我借入（欠款）</button><button type="button" class="${debt.kind === "lend" ? "selected" : ""}" data-kind="lend">我借出（待收）</button></div><input name="kind" type="hidden" value="${escapeHtml(debt.kind)}"></div>
+          <div class="form-field full"><label>对象 / 平台</label><input name="name" required maxlength="50" value="${escapeHtml(debt.name)}"></div>
+          <div class="form-field"><label>借款本金（元）</label><input name="amount" type="number" min="${Math.max(0.01, paid).toFixed(2)}" step="0.01" required value="${escapeHtml(debt.amount)}"></div>
+          <div class="form-field"><label>借款日期和时间</label><input name="borrowedAtDateTime" type="datetime-local" ${dateTimeRequired ? "required" : ""} value="${escapeHtml(debt.borrowedAtDateTime || "")}">${dateTimeRequired ? "" : '<div class="stat-note">旧记录未保存具体时间；如需更改日期，请填写实际日期和时间。</div>'}</div>
+          <div class="form-field"><label>到期还款日</label><input name="dueDate" type="date" value="${escapeHtml(debt.dueDate || "")}"></div>
+          <div class="form-field"><label>每期金额（选填）</label><input name="installment" type="number" min="0.01" step="0.01" value="${debt.installment ? escapeHtml(debt.installment) : ""}"></div>
+          <div class="form-field"><label>分期频率</label><select name="frequency"><option value="monthly" ${frequency === "monthly" ? "selected" : ""}>每月</option><option value="weekly" ${frequency === "weekly" ? "selected" : ""}>每周</option></select></div>
+          ${installmentScheduleFields(frequency, installmentDay, installmentWeekday)}
+          <div class="form-field full"><label>关联账户</label><select name="accountId">${accountOptions(debt.accountId)}</select></div>
+          <div class="form-field full"><label>备注（选填）</label><input name="note" maxlength="100" value="${escapeHtml(debt.note || "")}"></div>
+          <div class="notice full">已登记还款 / 收款：${money(paid)}。本金不能低于已登记金额；修改类型、日期或账户会同步更新本金收支记录。</div>
+        </div><div class="form-actions"><button type="button" class="button" data-cancel>取消</button><button class="button primary">保存修改</button></div></form>`, data => {
+          const name = String(data.get("name") || "").trim();
+          const amount = Number(data.get("amount"));
+          const installmentValue = String(data.get("installment") || "").trim();
+          const installment = installmentValue ? Number(installmentValue) : 0;
+          const kind = data.get("kind");
+          const accountId = data.get("accountId");
+          const borrowedAtDateTime = String(data.get("borrowedAtDateTime") || "");
+          const frequency = data.get("frequency");
+          const installmentDay = Number(data.get("installmentDay"));
+          const installmentWeekday = Number(data.get("installmentWeekday"));
+          if (!name || !["borrow", "lend"].includes(kind) || !Number.isFinite(amount) || amount <= 0 || amount + 0.001 < paid || (installmentValue && (!Number.isFinite(installment) || installment <= 0)) || (installmentValue && frequency === "monthly" && (!Number.isInteger(installmentDay) || installmentDay < 1 || installmentDay > 31)) || (installmentValue && frequency === "weekly" && (!Number.isInteger(installmentWeekday) || installmentWeekday < 0 || installmentWeekday > 6)) || !accountById(accountId) || (borrowedAtDateTime && !isValidDateTime(borrowedAtDateTime)) || (dateTimeRequired && !borrowedAtDateTime)) {
+            toast("请检查名称、本金、日期时间、分期金额、还款日和账户");
+            return;
+          }
+          const previousKind = debt.kind;
+          debt.kind = kind;
+          debt.name = name;
+          debt.amount = amount;
+          debt.borrowedAtDateTime = borrowedAtDateTime || undefined;
+          if (borrowedAtDateTime) debt.borrowedAt = borrowedAtDateTime.slice(0, 10);
+          debt.dueDate = String(data.get("dueDate") || "");
+          debt.installment = installment;
+          debt.frequency = frequency;
+          delete debt.installmentDay;
+          delete debt.installmentWeekday;
+          if (installment) {
+            if (frequency === "monthly") debt.installmentDay = installmentDay;
+            else debt.installmentWeekday = installmentWeekday;
+          }
+          debt.accountId = accountId;
+          debt.note = String(data.get("note") || "").trim();
+          principalTransaction.type = kind === "borrow" ? "income" : "expense";
+          principalTransaction.amount = amount;
+          principalTransaction.accountId = accountId;
+          principalTransaction.category = kind === "borrow" ? "借入款" : "借出款";
+          principalTransaction.note = `${kind === "borrow" ? "借入" : "借出"}：${name}`;
+          if (borrowedAtDateTime) {
+            principalTransaction.date = borrowedAtDateTime.slice(0, 10);
+            principalTransaction.dateTime = borrowedAtDateTime;
+          } else if (previousKind !== kind || !principalTransaction.date) {
+            principalTransaction.date = debt.borrowedAt;
+          }
+          state.transactions.filter(transaction => transaction.debtId === debt.id && transaction.id !== principalTransaction.id).forEach(transaction => {
+            transaction.type = kind === "borrow" ? "expense" : "income";
+            transaction.category = kind === "borrow" ? "还款" : "收回借款";
+            transaction.note = `${kind === "borrow" ? "还款" : "收款"}：${name}`;
+          });
+          persist(); closeModal(); render(); toast("借款记录已更新");
+        });
+        const form = document.getElementById("modalForm");
+        form.elements.frequency.addEventListener("change", () => {
+          const weekly = form.elements.frequency.value === "weekly";
+          document.getElementById("installmentDayField").hidden = weekly;
+          document.getElementById("installmentWeekdayField").hidden = !weekly;
+        });
+        form.querySelectorAll("[data-kind]").forEach(button => button.addEventListener("click", () => {
+          form.querySelectorAll("[data-kind]").forEach(item => item.classList.toggle("selected", item === button));
+          form.elements.kind.value = button.dataset.kind;
+        }));
+        form.querySelector("[data-cancel]").addEventListener("click", closeModal);
+      }
+      function repayDebt(id) {
+        const debt = state.debts.find(d => d.id === id);
+        if (!debt) return;
+        const remaining = debtRemaining(debt), defaultAmount = debt.installment ? Math.min(debt.installment, remaining) : remaining;
+        openModal(debt.kind === "borrow" ? "登记还款" : "登记收款", `<form id="modalForm"><div class="form-grid">
+          <div class="form-field"><label>本次${debt.kind === "borrow" ? "还款" : "收款"}金额（元）</label><input name="amount" type="number" min="0.01" max="${remaining}" step="0.01" value="${defaultAmount}" required></div>
+          <div class="form-field"><label>日期和时间</label><input name="dateTime" type="datetime-local" value="${localDateTime(new Date())}" required></div>
+          <div class="form-field full"><label>关联账户</label><select name="accountId">${accountOptions(debt.accountId)}</select></div>
+          <div class="notice full">剩余未还：${money(remaining)}。本次登记会同步更新账户余额和剩余欠款。</div>
+        </div><div class="form-actions"><button type="button" class="button" data-cancel>取消</button><button class="button primary">确认登记</button></div></form>`, data => {
+          const amount = Number(data.get("amount")), accountId = data.get("accountId"), dateTimeValue = String(data.get("dateTime") || "");
+          if (!Number.isFinite(amount) || amount <= 0 || amount > remaining + 0.001 || !accountById(accountId) || !isValidDateTime(dateTimeValue)) { toast("金额超出剩余欠款，或日期时间、账户无效"); return; }
+          const date = dateTimeValue.slice(0, 10);
+          debt.payments = debt.payments || [];
+          debt.payments.push({ amount, date, dateTime: dateTimeValue });
+          state.transactions.push({ id: makeId(), type: debt.kind === "borrow" ? "expense" : "income", amount, accountId, category: debt.kind === "borrow" ? "还款" : "收回借款", note: `${debt.kind === "borrow" ? "还款" : "收款"}：${debt.name}`, date, dateTime: dateTimeValue, debtId: debt.id });
+          persist(); closeModal(); render(); toast("已登记");
+        });
+        document.querySelector("[data-cancel]").addEventListener("click", closeModal);
+      }
+      document.querySelectorAll(".nav button").forEach(button => button.addEventListener("click", () => setPage(button.dataset.page)));
+      document.querySelectorAll("[data-go]").forEach(button => button.addEventListener("click", () => setPage(button.dataset.go)));
+      document.getElementById("quickAdd").addEventListener("click", () => addTransaction());
+      document.getElementById("cashAdd").addEventListener("click", () => addTransaction({ accountId: "cash" }));
+      document.getElementById("addAccount").addEventListener("click", addAccount);
+      document.getElementById("addDebt").addEventListener("click", addDebt);
+      document.querySelector(".stats").addEventListener("click", event => {
+        const card = event.target.closest("[data-month-detail]");
+        if (card) openMonthDetails(card.dataset.monthDetail);
+      });
+      document.getElementById("overviewAccounts").addEventListener("click", event => {
+        const card = event.target.closest("[data-account-details]");
+        if (card) openAccountDetails(card.dataset.accountDetails);
+      });
+      document.getElementById("allAccounts").addEventListener("click", event => {
+        const editButton = event.target.closest("[data-edit-account]");
+        if (editButton) { editAccount(editButton.dataset.editAccount); return; }
+        const deleteButton = event.target.closest("[data-delete-account]");
+        if (deleteButton) { deleteAccount(deleteButton.dataset.deleteAccount); return; }
+        const card = event.target.closest("[data-account-details]");
+        if (card) openAccountDetails(card.dataset.accountDetails);
+      });
+      document.getElementById("txFilter").addEventListener("change", render);
+      document.getElementById("txMonth").addEventListener("change", render);
+      document.getElementById("allTransactions").addEventListener("click", event => {
+        const deleteButton = event.target.closest("[data-delete-transaction]");
+        if (deleteButton) {
+          deleteTransaction(deleteButton.dataset.deleteTransaction);
+          return;
+        }
+        const button = event.target.closest("[data-edit-transaction]");
+        if (!button) return;
+        const transaction = state.transactions.find(t => t.id === button.dataset.editTransaction);
+        if (transaction) addTransaction({}, transaction);
+      });
+      document.getElementById("closeModal").addEventListener("click", closeModal);
+      document.getElementById("modalBackdrop").addEventListener("click", event => { if (event.target.id === "modalBackdrop") closeModal(); });
+      document.addEventListener("keydown", event => { if (event.key === "Escape") closeModal(); });
+      const banknoteGroups = document.getElementById("banknotes");
+      const coinGroups = document.getElementById("coins");
+      let activeBillSwipe = null;
+      const updateBillStack = group => {
+        const stack = group.querySelector(".banknote-stack");
+        const notes = [...stack.querySelectorAll(".banknote:not(.is-thrown)")];
+        const count = Number(group.dataset.total);
+        group.dataset.remaining = String(notes.length);
+        stack.style.height = `${Number(stack.dataset.noteHeight) + Math.min(Math.max(0, notes.length - 1) * 1.3, 64)}px`;
+        notes.forEach((note, index) => {
+          const offset = Math.min((notes.length - index - 1) * 1.3, 64);
+          note.dataset.layer = String(index);
+          note.style.top = `${offset}px`;
+          note.style.left = `calc(8% + ${(notes.length - index - 1) * .3}px)`;
+          note.style.right = `calc(8% + ${(notes.length - index - 1) * .3}px)`;
+          note.style.zIndex = String(index);
+        });
+        const status = group.querySelector(".denomination-status");
+        status.textContent = notes.length === count ? `${count} 张 × ¥${stack.dataset.denomination} = ${money(count * Number(stack.dataset.denomination))}` : notes.length ? `还可滑出 ${notes.length} 张 · 余额不变` : "已滑完 · 余额不变";
+        group.querySelector("[data-restore-bills]").hidden = notes.length === count;
+        if (!notes.length) stack.innerHTML = '<div class="empty">纸币都拿出来啦</div>';
+      };
+      const showBillFeedback = (x, y, value) => {
+        const feedback = document.createElement("div");
+        feedback.className = "bill-feedback";
+        feedback.textContent = `+${money(value)}`;
+        feedback.style.left = `${x}px`;
+        feedback.style.top = `${y}px`;
+        document.body.append(feedback);
+        feedback.addEventListener("animationend", () => feedback.remove(), { once: true });
+      };
+      const launchBill = (item, event, deltaX, deltaY) => {
+        if (item.classList.contains("is-thrown")) return;
+        const denomination = Number(item.dataset.denomination || item.dataset.value);
+        const isCoin = item.classList.contains("coin-chip");
+        const group = isCoin ? null : item.closest(".denomination-group");
+        if (isCoin) {
+          const count = Number(item.dataset.remaining) - 1;
+          item.dataset.remaining = String(count);
+          coinGroups.querySelector("[data-restore-coins]").hidden = false;
+          if (count > 0) {
+            item.querySelector("span:last-child").textContent = `${count} 枚`;
+            item.setAttribute("aria-label", `${item.dataset.label}硬币，可滑动取出，共${count}枚`);
+          }
+        }
+        item.classList.add("is-thrown");
+        item.style.setProperty("--throw-x", `${deltaX < 0 ? "-110" : "110"}vw`);
+        item.style.setProperty("--throw-y", `${Math.min(-35, deltaY - 50)}px`);
+        item.style.setProperty("--throw-rotate", `${deltaX < 0 ? -22 : 22}deg`);
+        showBillFeedback(event.clientX, event.clientY, denomination);
+        item.addEventListener("animationend", () => {
+          item.remove();
+          if (group) updateBillStack(group);
+        }, { once: true });
+      };
+      banknoteGroups.addEventListener("pointerdown", event => {
+        const note = event.target.closest(".banknote");
+        if (!note || (event.pointerType === "mouse" && event.button !== 0)) return;
+        event.preventDefault();
+        note.setPointerCapture(event.pointerId);
+        note.classList.add("is-dragging");
+        activeBillSwipe = { note, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, moved: false };
+      });
+      banknoteGroups.addEventListener("pointermove", event => {
+        const drag = activeBillSwipe;
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        const dx = event.clientX - drag.startX, dy = event.clientY - drag.startY;
+        drag.x = event.clientX;
+        drag.y = event.clientY;
+        if (Math.abs(dx) > 6 || Math.abs(dy) > 6) drag.moved = true;
+        drag.note.style.setProperty("--drag-x", `${Math.max(-70, Math.min(70, dx * .22))}px`);
+        drag.note.style.setProperty("--drag-y", `${Math.max(-45, Math.min(35, dy * .2))}px`);
+        drag.note.style.setProperty("--drag-rotate", `${Math.max(-5, Math.min(5, dx / 35))}deg`);
+      });
+      const finishBillSwipe = event => {
+        const drag = activeBillSwipe;
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        drag.note.classList.remove("is-dragging");
+        drag.note.style.removeProperty("--drag-x");
+        drag.note.style.removeProperty("--drag-y");
+        drag.note.style.removeProperty("--drag-rotate");
+        if (drag.note.hasPointerCapture(event.pointerId)) drag.note.releasePointerCapture(event.pointerId);
+        activeBillSwipe = null;
+        const dx = drag.x - drag.startX, dy = drag.y - drag.startY;
+        if (event.type === "pointerup" && drag.moved && Math.hypot(dx, dy) >= 28) launchBill(drag.note, event, dx, dy);
+      };
+      banknoteGroups.addEventListener("pointerup", finishBillSwipe);
+      banknoteGroups.addEventListener("pointercancel", finishBillSwipe);
+      coinGroups.addEventListener("pointerdown", event => {
+        const coin = event.target.closest(".coin-chip");
+        if (!coin || (event.pointerType === "mouse" && event.button !== 0)) return;
+        event.preventDefault();
+        coin.setPointerCapture(event.pointerId);
+        coin.classList.add("is-dragging");
+        activeBillSwipe = { note: coin, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, moved: false };
+      });
+      coinGroups.addEventListener("pointermove", event => {
+        const drag = activeBillSwipe;
+        if (!drag || drag.pointerId !== event.pointerId || !drag.note.classList.contains("coin-chip")) return;
+        drag.x = event.clientX;
+        drag.y = event.clientY;
+        if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 6) drag.moved = true;
+        drag.note.style.transform = `translate(${Math.max(-50, Math.min(50, (event.clientX - drag.startX) * .35))}px, ${Math.max(-40, Math.min(30, (event.clientY - drag.startY) * .25))}px)`;
+      });
+      const finishCoinSwipe = event => {
+        const drag = activeBillSwipe;
+        if (!drag || drag.pointerId !== event.pointerId || !drag.note.classList.contains("coin-chip")) return;
+        drag.note.classList.remove("is-dragging");
+        drag.note.style.removeProperty("transform");
+        if (drag.note.hasPointerCapture(event.pointerId)) drag.note.releasePointerCapture(event.pointerId);
+        activeBillSwipe = null;
+        const dx = drag.x - drag.startX, dy = drag.y - drag.startY;
+        if (event.type === "pointerup" && drag.moved && Math.hypot(dx, dy) >= 20) launchBill(drag.note, event, dx, dy);
+      };
+      coinGroups.addEventListener("pointerup", finishCoinSwipe);
+      coinGroups.addEventListener("pointercancel", finishCoinSwipe);
+      coinGroups.addEventListener("click", event => {
+        if (event.target.closest("[data-restore-coins]")) render();
+      });
+      coinGroups.addEventListener("keydown", event => {
+        const coin = event.target.closest(".coin-chip");
+        if (!coin || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "].includes(event.key)) return;
+        event.preventDefault();
+        const dx = event.key === "ArrowLeft" ? -45 : event.key === "ArrowRight" ? 45 : 0;
+        const dy = event.key === "ArrowUp" || event.key === " " ? -45 : event.key === "ArrowDown" ? 45 : 0;
+        const rect = coin.getBoundingClientRect();
+        launchBill(coin, { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 }, dx, dy);
+      });
+      banknoteGroups.addEventListener("click", event => {
+        if (event.target.closest("[data-restore-bills]")) render();
+      });
+      banknoteGroups.addEventListener("keydown", event => {
+        const note = event.target.closest(".banknote");
+        if (!note) return;
+        if (event.key === "Home") {
+          event.preventDefault();
+          render();
+          return;
+        }
+        if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "].includes(event.key)) return;
+        event.preventDefault();
+        const dx = event.key === "ArrowLeft" ? -45 : event.key === "ArrowRight" ? 45 : 0;
+        const dy = event.key === "ArrowUp" || event.key === " " ? -45 : event.key === "ArrowDown" ? 45 : 0;
+        const rect = note.getBoundingClientRect();
+        launchBill(note, { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 }, dx, dy);
+      });
+      document.getElementById("debtList").addEventListener("click", event => {
+        const edit = event.target.closest("[data-edit-debt]"), repay = event.target.closest("[data-repay]"), remove = event.target.closest("[data-delete-debt]");
+        if (edit) {
+          editDebt(edit.dataset.editDebt);
+          return;
+        }
+        if (repay) repayDebt(repay.dataset.repay);
+        if (remove) {
+          const debt = state.debts.find(d => d.id === remove.dataset.deleteDebt);
+          if (!debt) return;
+          if (!confirm(`删除「${debt.name}」的借款记录？相关本金和还款记录也将从收支中移除。此操作不可撤销。`)) return;
+          state.debts = state.debts.filter(d => d.id !== debt.id);
+          state.transactions = state.transactions.filter(t => t.debtId !== debt.id);
+          persist(); render(); toast("记录已删除");
+        }
+      });
+      document.getElementById("exportBtn").addEventListener("click", () => {
+        const blob = new Blob([JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), ...state }, null, 2)], { type: "application/json" });
+        const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `汤圆记账备份-${today()}.json`; link.click(); URL.revokeObjectURL(link.href);
+      });
+      document.getElementById("importBtn").addEventListener("click", () => document.getElementById("importFile").click());
+      document.getElementById("importFile").addEventListener("change", async event => {
+        const file = event.target.files[0]; if (!file) return;
+        try {
+          const data = JSON.parse(await file.text());
+          if (!data || !Array.isArray(data.accounts) || !Array.isArray(data.transactions) || !Array.isArray(data.debts)) throw new Error("文件结构不正确");
+          if (!data.accounts.every(a => a.id && a.name && Number.isFinite(Number(a.opening))) || !data.transactions.every(t => t.id && ["income", "expense", "transfer"].includes(t.type) && Number(t.amount) > 0) || !data.debts.every(d => d.id && Number(d.amount) > 0 && ["borrow", "lend"].includes(d.kind))) throw new Error("备份数据校验失败");
+          if (!confirm("导入将替换当前账本数据，建议先导出当前备份。确定继续吗？")) return;
+          state = { accounts: data.accounts, transactions: data.transactions, debts: data.debts };
+          persist(); render(); toast("备份导入成功");
+        } catch (error) { console.error("导入账本失败：", error); toast("导入失败：" + error.message); }
+        finally { event.target.value = ""; }
+      });
+      if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+        navigator.serviceWorker.register("./sw.js").catch(error => console.error("注册离线缓存失败：", error));
+      }
+      render();
+    })();
+  </script>
+</body>
+</html>

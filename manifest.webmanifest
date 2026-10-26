@@ -1,0 +1,21 @@
+{
+  "id": "./",
+  "name": "汤圆记账 · 个人账本",
+  "short_name": "汤圆记账",
+  "description": "本地保存收支、账户和借款记录的个人账本。",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3f8fc",
+  "theme_color": "#f3f8fc",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

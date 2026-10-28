@@ -380,7 +380,7 @@
         <button class="cash-add" id="cashAdd" aria-label="记一笔">+</button>
         <div class="stats">
           <button class="stat stat-action" type="button" data-month-detail="income" aria-label="查看本月收入明细"><span class="stat-title">本月收入 <span>↗</span></span><span class="stat-number income" id="monthIncome">¥0.00</span><span class="stat-note">含借入款、收回借款 · 点击查看明细</span></button>
-          <button class="stat stat-action" type="button" data-month-detail="expense" aria-label="查看本月支出明细"><span class="stat-title">本月支出 <span>↘</span></span><span class="stat-number expense" id="monthExpense">¥0.00</span><span class="stat-note">含实际支出及本月到期未还分期 · 点击查看</span></button>
+          <button class="stat stat-action" type="button" data-month-detail="expense" aria-label="查看本月支出明细"><span class="stat-title">本月支出 <span>↘</span></span><span class="stat-number expense" id="monthExpense">¥0.00</span><span class="stat-note">含借出款、还款和到期未还分期 · 点击查看</span></button>
           <button class="stat stat-action" type="button" data-month-detail="balance" aria-label="查看本月结余明细"><span class="stat-title">本月结余 <span>＝</span></span><span class="stat-number" id="monthBalance">¥0.00</span><span class="stat-note" id="monthName"></span></button>
         </div>
         <div class="grid-two">
@@ -460,6 +460,7 @@
         if (!account) return 0;
         return Number(account.opening || 0) + state.transactions.reduce((sum, t) => {
           if (t.type === "transfer") return sum + (t.accountId === id ? -Number(t.amount) : t.toAccountId === id ? Number(t.amount) : 0);
+          if (t.creditPurchase) return sum;
           return sum + (t.accountId === id ? (t.type === "income" ? Number(t.amount) : -Number(t.amount)) : 0);
         }, 0);
       };
@@ -512,7 +513,8 @@
           <button class="tx-edit" data-edit-transaction="${escapeHtml(t.id)}" aria-label="编辑${escapeHtml(title)}">编辑</button>
           <button class="tx-edit danger" data-delete-transaction="${escapeHtml(t.id)}" aria-label="删除${escapeHtml(title)}">删除</button>
         ` : "";
-        return `<div class="transaction"><div class="tx-icon ${isTransfer ? "" : isIncome ? "in" : "out"}" aria-hidden="true">${icon}</div><div><div class="tx-title">${escapeHtml(title)}</div><div class="tx-meta">${fmtDateTime(t.dateTime, t.date)} · ${escapeHtml(account?.name || "账户已删除")}${t.category && t.note ? " · " + escapeHtml(t.category) : ""}</div></div><div class="tx-actions"><div class="tx-amount ${isTransfer ? "" : isIncome ? "in" : "out"}">${amountText}</div>${actions}</div></div>`;
+        const accountLabel = t.creditPurchase ? "信用消费（未扣账户余额）" : account?.name || "账户已删除";
+        return `<div class="transaction"><div class="tx-icon ${isTransfer ? "" : isIncome ? "in" : "out"}" aria-hidden="true">${icon}</div><div><div class="tx-title">${escapeHtml(title)}</div><div class="tx-meta">${fmtDateTime(t.dateTime, t.date)} · ${escapeHtml(accountLabel)}${t.category && t.note ? " · " + escapeHtml(t.category) : ""}</div></div><div class="tx-actions"><div class="tx-amount ${isTransfer ? "" : isIncome ? "in" : "out"}">${amountText}</div>${actions}</div></div>`;
       };
       function renderCash(cashAccount) {
         const cash = cashAccount ? accountBalance(cashAccount.id) : 0;
@@ -605,12 +607,28 @@
         return outstanding ? [{ debt, dueDates, amount: outstanding, scheduledAmount, paidThisMonth }] : [];
       });
       const scheduledExpenseForMonth = month => scheduledExpenseItemsForMonth(month).reduce((total, item) => total + item.amount, 0);
+      function updateDebtAmountField(form, paid = 0) {
+        const amountField = form.elements.amount;
+        const amount = Number(amountField.value);
+        const kind = form.elements.kind.value;
+        if (Number.isFinite(amount) && amount !== 0) amountField.value = String(kind === "lend" ? Math.abs(amount) : -Math.abs(amount));
+        amountField.placeholder = kind === "lend" ? "1000.00" : "-1000.00";
+        if (kind !== "lend") {
+          amountField.removeAttribute("min");
+          amountField.max = (-Math.max(0.01, paid)).toFixed(2);
+          form.querySelector("[data-debt-amount-label]").textContent = kind === "credit" ? "消费金额（元，信用欠款请填负数）" : "借款金额（元，借入请填负数）";
+        } else {
+          amountField.min = Math.max(0.01, paid).toFixed(2);
+          amountField.removeAttribute("max");
+          form.querySelector("[data-debt-amount-label]").textContent = "本金金额（元，借出请填正数）";
+        }
+      }
       function render() {
         const now = new Date(), month = localDate(now).slice(0, 7);
         document.getElementById("today").textContent = now.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" });
         document.getElementById("monthName").textContent = now.toLocaleDateString("zh-CN", { month: "long" }) + "收支情况";
         const assets = state.accounts.reduce((s, a) => s + accountBalance(a.id), 0);
-        const owed = state.debts.filter(d => d.kind === "borrow").reduce((s, d) => s + debtRemaining(d), 0);
+        const owed = state.debts.filter(d => d.kind === "borrow" || d.kind === "credit").reduce((s, d) => s + debtRemaining(d), 0);
         const lent = state.debts.filter(d => d.kind === "lend").reduce((s, d) => s + debtRemaining(d), 0);
         const cashAccount = accountById("cash") || state.accounts.find(a => a.type === "现金");
         const investments = state.accounts.filter(a => a.type === "投资").reduce((s, a) => s + accountBalance(a.id), 0);
@@ -648,10 +666,10 @@
         document.getElementById("debtOverdue").textContent = overdue + " 笔";
         const list = [...state.debts].sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"));
         document.getElementById("debtList").innerHTML = list.length ? list.map(d => {
-          const remaining = debtRemaining(d), isBorrow = d.kind === "borrow";
+          const remaining = debtRemaining(d), isBorrow = d.kind === "borrow", isCredit = d.kind === "credit";
           const overdueFlag = remaining > 0 && d.dueDate && d.dueDate < today();
           const paid = (d.payments || []).map(p => `${fmtDateTime(p.dateTime, p.date)} ${money(p.amount)}`).join("、");
-          return `<article class="debt-card"><div><div class="debt-title"><span class="debt-kind ${isBorrow ? "" : "lend"}">${isBorrow ? "我借入" : "我借出"}</span>${escapeHtml(d.name)}</div><div class="debt-meta">借款时间：${fmtDateTime(d.borrowedAtDateTime, d.borrowedAt)}　·　本金：${money(d.amount)}<br>到期还款：<span style="color:${overdueFlag ? "var(--red)" : "inherit"}">${fmtDate(d.dueDate)}${overdueFlag ? "（已逾期）" : ""}</span>${d.installment ? `　·　每期 ${money(d.installment)}${d.frequency === "weekly" ? " / 周" : " / 月"}` : ""}${d.note ? `<br>备注：${escapeHtml(d.note)}` : ""}${paid ? `<br>已登记：${paid}` : ""}</div></div><div class="debt-right"><div class="debt-balance">${money(remaining)}<small>${remaining === 0 ? "已结清" : "剩余未还"}</small></div><div class="debt-actions"><button class="button subtle" data-edit-debt="${escapeHtml(d.id)}">编辑</button>${remaining > 0 ? `<button class="button" data-repay="${escapeHtml(d.id)}">${isBorrow ? "登记还款" : "登记收款"}</button>` : ""}<button class="button subtle danger" data-delete-debt="${escapeHtml(d.id)}" aria-label="删除记录">删除</button></div></div></article>`;
+          return `<article class="debt-card"><div><div class="debt-title"><span class="debt-kind ${isBorrow || isCredit ? "" : "lend"}">${isBorrow ? "我借入" : isCredit ? "信用消费" : "我借出"}</span>${escapeHtml(d.name)}</div><div class="debt-meta">${isCredit ? `消费时间：${fmtDateTime(d.borrowedAtDateTime, d.borrowedAt)}　·　分类：${escapeHtml(d.category || "购物")}　·　消费金额：${money(d.amount)}` : `借款时间：${fmtDateTime(d.borrowedAtDateTime, d.borrowedAt)}　·　本金：${money(d.amount)}`}<br>到期还款：<span style="color:${overdueFlag ? "var(--red)" : "inherit"}">${fmtDate(d.dueDate)}${overdueFlag ? "（已逾期）" : ""}</span>${d.installment ? `　·　每期 ${money(d.installment)}${d.frequency === "weekly" ? " / 周" : " / 月"}` : ""}${d.note ? `<br>备注：${escapeHtml(d.note)}` : ""}${paid ? `<br>已登记：${paid}` : ""}</div></div><div class="debt-right"><div class="debt-balance">${money(remaining)}<small>${remaining === 0 ? "已结清" : "剩余未还"}</small></div><div class="debt-actions"><button class="button subtle" data-edit-debt="${escapeHtml(d.id)}">编辑</button>${remaining > 0 ? `<button class="button" data-repay="${escapeHtml(d.id)}">${isBorrow || isCredit ? "登记还款" : "登记收款"}</button>` : ""}<button class="button subtle danger" data-delete-debt="${escapeHtml(d.id)}" aria-label="删除记录">删除</button></div></div></article>`;
         }).join("") : '<div class="empty">暂无借款或分期记录</div>';
       }
       const accountOptions = selected => state.accounts.map(a => `<option value="${escapeHtml(a.id)}" ${a.id === selected ? "selected" : ""}>${escapeHtml(a.name)}</option>`).join("");
@@ -817,42 +835,79 @@
         state.accounts = state.accounts.filter(item => item.id !== id);
         persist(); render(); toast("账户已删除");
       }
+      function debtTypeFieldsMarkup(kind, selectedCategory = "购物") {
+        const categories = ["餐饮", "日用", "交通", "购物", "住房", "医疗", "其他"];
+        return `<div class="form-field" id="creditCategoryField" ${kind === "credit" ? "" : "hidden"}><label>消费分类</label><select name="category">${categories.map(category => `<option ${category === selectedCategory ? "selected" : ""}>${category}</option>`).join("")}</select></div>
+          <div class="form-field" id="installmentAmountField" ${kind === "credit" ? "hidden" : ""}><label>每期金额（选填）</label><input name="installment" type="number" min="0.01" step="0.01" placeholder="如为分期请填写"></div>
+          <div class="form-field" id="installmentFrequencyField" ${kind === "credit" ? "hidden" : ""}><label>分期频率</label><select name="frequency"><option value="monthly">每月</option><option value="weekly">每周</option></select></div>`;
+      }
+      function updateDebtKindFields(form) {
+        const kind = form.elements.kind.value;
+        const isCredit = kind === "credit";
+        document.getElementById("creditCategoryField").hidden = !isCredit;
+        document.getElementById("installmentAmountField").hidden = isCredit;
+        document.getElementById("installmentFrequencyField").hidden = isCredit;
+        document.getElementById("installmentDayField").hidden = isCredit || form.elements.frequency.value === "weekly";
+        document.getElementById("installmentWeekdayField").hidden = isCredit || form.elements.frequency.value !== "weekly";
+        document.getElementById("debtAccountLabel").textContent = isCredit ? "默认还款账户" : "关联账户";
+        document.getElementById("debtNameLabel").textContent = isCredit ? "平台 / 商家" : "出借人 / 平台";
+        document.getElementById("debtDateLabel").textContent = isCredit ? "消费日期和时间" : "借款日期和时间";
+        document.getElementById("debtNoteLabel").textContent = isCredit ? "商品 / 用途说明" : "备注（选填）";
+        form.elements.name.placeholder = isCredit ? "例如：花呗、淘宝" : "例如：张先生";
+        form.elements.note.placeholder = isCredit ? "例如：买了耳机" : "期数、利息或其他说明";
+        document.getElementById("debtNotice").textContent = isCredit
+          ? "保存后会记入本月支出和待还欠款，不会增加或扣减账户余额；登记还款时再扣除所选付款账户。每次购物请单独记一笔。"
+          : kind === "borrow"
+            ? "保存后会自动记入实际到账的账户余额和待还欠款；之后花掉时请另记支出。"
+            : "保存后会自动扣减关联账户余额，并记为待收借出款。";
+      }
       function addDebt() {
         if (!state.accounts.length) { toast("请先创建一个账户"); return; }
         const now = new Date();
         openModal("新增借款 / 分期", `<form id="modalForm"><div class="form-grid">
-          <div class="form-field full"><label>记录类型</label><div class="type-switch"><button type="button" class="selected" data-kind="borrow">我借入（欠款）</button><button type="button" data-kind="lend">我借出（待收）</button></div><input name="kind" type="hidden" value="borrow"></div>
-          <div class="form-field"><label>对象 / 平台</label><input name="name" required maxlength="50" placeholder="例如：花呗、张先生"></div>
-          <div class="form-field"><label>借款本金（元）</label><input name="amount" type="number" min="0.01" step="0.01" required placeholder="0.00"></div>
-          <div class="form-field"><label>借款日期和时间</label><input name="borrowedAtDateTime" type="datetime-local" value="${localDateTime(new Date())}" required></div>
+          <div class="form-field full"><label>记录类型</label><div class="type-switch"><button type="button" class="selected" data-kind="borrow">借到现金</button><button type="button" data-kind="credit">信用消费（花呗/信用卡）</button><button type="button" data-kind="lend">借出给别人</button></div><input name="kind" type="hidden" value="borrow"></div>
+          <div class="form-field"><label id="debtNameLabel">出借人 / 平台</label><input name="name" required maxlength="50" placeholder="例如：张先生"></div>
+          <div class="form-field"><label data-debt-amount-label>借款金额（元，借入请填负数）</label><input name="amount" type="number" max="0" step="0.01" required placeholder="-1000.00"></div>
+          ${debtTypeFieldsMarkup("borrow")}
+          <div class="form-field"><label id="debtDateLabel">借款日期和时间</label><input name="borrowedAtDateTime" type="datetime-local" value="${localDateTime(new Date())}" required></div>
           <div class="form-field"><label>到期还款日</label><input name="dueDate" type="date"></div>
-          <div class="form-field"><label>每期金额（选填）</label><input name="installment" type="number" min="0.01" step="0.01" placeholder="如为分期请填写"></div>
-          <div class="form-field"><label>分期频率</label><select name="frequency"><option value="monthly">每月</option><option value="weekly">每周</option></select></div>
           ${installmentScheduleFields("monthly", now.getDate(), now.getDay())}
-          <div class="form-field full"><label>关联账户</label><select name="accountId">${accountOptions(state.accounts[0].id)}</select></div>
-          <div class="form-field full"><label>备注（选填）</label><input name="note" maxlength="100" placeholder="期数、利息或其他说明"></div>
+          <div class="form-field full"><label id="debtAccountLabel">关联账户</label><select name="accountId">${accountOptions(state.accounts[0].id)}</select></div>
+          <div class="form-field full"><label id="debtNoteLabel">备注（选填）</label><input name="note" maxlength="100" placeholder="填写商品名称、用途或其他说明"></div>
           <div class="notice full" id="debtNotice">保存后会自动记入账户余额：借入增加余额，借出扣减余额。每期从下一个周期开始到期；本月到期且尚未登记的借入分期会计入本月支出。</div>
         </div><div class="form-actions"><button type="button" class="button" data-cancel>取消</button><button class="button primary">保存记录</button></div></form>`, data => {
-          const amount = Number(data.get("amount")), installment = data.get("installment") ? Number(data.get("installment")) : 0;
-          const accountId = data.get("accountId"), kind = data.get("kind"), frequency = data.get("frequency"), borrowedAtDateTime = String(data.get("borrowedAtDateTime") || "");
+          const enteredAmount = Number(data.get("amount")), kind = data.get("kind"), amount = Math.abs(enteredAmount), installment = data.get("installment") ? Number(data.get("installment")) : 0;
+          const category = String(data.get("category") || "");
+          const accountId = data.get("accountId"), frequency = data.get("frequency"), borrowedAtDateTime = String(data.get("borrowedAtDateTime") || "");
           const installmentDay = Number(data.get("installmentDay")), installmentWeekday = Number(data.get("installmentWeekday"));
-          if (!Number.isFinite(amount) || amount <= 0 || (installment && (!Number.isFinite(installment) || installment <= 0)) || (installment && frequency === "monthly" && (!Number.isInteger(installmentDay) || installmentDay < 1 || installmentDay > 31)) || (installment && frequency === "weekly" && (!Number.isInteger(installmentWeekday) || installmentWeekday < 0 || installmentWeekday > 6)) || !accountById(accountId) || !isValidDateTime(borrowedAtDateTime)) { toast("请检查本金、日期时间、分期金额、还款日和账户"); return; }
-          const debt = { id: makeId(), kind, name: String(data.get("name")).trim(), amount, borrowedAt: borrowedAtDateTime.slice(0, 10), borrowedAtDateTime, dueDate: data.get("dueDate"), installment, frequency, ...(installment ? frequency === "monthly" ? { installmentDay } : { installmentWeekday } : {}), accountId, note: String(data.get("note") || "").trim(), payments: [] };
+          if (!Number.isFinite(enteredAmount) || !["borrow", "credit", "lend"].includes(kind) || (kind === "lend" ? enteredAmount <= 0 : enteredAmount >= 0) || (kind === "credit" && !category) || (installment && (!Number.isFinite(installment) || installment <= 0)) || (installment && frequency === "monthly" && (!Number.isInteger(installmentDay) || installmentDay < 1 || installmentDay > 31)) || (installment && frequency === "weekly" && (!Number.isInteger(installmentWeekday) || installmentWeekday < 0 || installmentWeekday > 6)) || !accountById(accountId) || !isValidDateTime(borrowedAtDateTime)) { toast("借款/信用消费请填负数，借出请填正数，并检查日期、分类、分期金额和账户"); return; }
+          const name = String(data.get("name")).trim();
+          const note = String(data.get("note") || "").trim();
+          const debt = { id: makeId(), kind, name, amount, borrowedAt: borrowedAtDateTime.slice(0, 10), borrowedAtDateTime, dueDate: data.get("dueDate"), ...(kind === "credit" ? { category } : { installment, frequency, ...(installment ? frequency === "monthly" ? { installmentDay } : { installmentWeekday } : {}) }), accountId, note, payments: [] };
           state.debts.push(debt);
-          state.transactions.push({ id: makeId(), type: kind === "borrow" ? "income" : "expense", amount, accountId, category: kind === "borrow" ? "借入款" : "借出款", note: `${kind === "borrow" ? "借入" : "借出"}：${debt.name}`, date: debt.borrowedAt, dateTime: borrowedAtDateTime, debtId: debt.id });
+          state.transactions.push({
+            id: makeId(),
+            type: kind === "borrow" ? "income" : "expense",
+            amount,
+            accountId: kind === "credit" ? "" : accountId,
+            category: kind === "borrow" ? "借入款" : kind === "credit" ? category : "借出款",
+            note: kind === "credit" ? `${name}消费${note ? `：${note}` : ""}` : `${kind === "borrow" ? "借入" : "借出"}：${name}`,
+            date: debt.borrowedAt,
+            dateTime: borrowedAtDateTime,
+            debtId: debt.id,
+            ...(kind === "credit" ? { creditPurchase: true } : {})
+          });
           persist(); closeModal(); render(); toast("借款记录已保存");
         });
         const form = document.getElementById("modalForm");
-        const updateScheduleFields = () => {
-          const weekly = form.elements.frequency.value === "weekly";
-          document.getElementById("installmentDayField").hidden = weekly;
-          document.getElementById("installmentWeekdayField").hidden = !weekly;
-        };
-        form.elements.frequency.addEventListener("change", updateScheduleFields);
+        updateDebtAmountField(form);
+        updateDebtKindFields(form);
+        form.elements.frequency.addEventListener("change", () => updateDebtKindFields(form));
         form.querySelectorAll("[data-kind]").forEach(button => button.addEventListener("click", () => {
           form.querySelectorAll("[data-kind]").forEach(b => b.classList.toggle("selected", b === button));
           form.elements.kind.value = button.dataset.kind;
-          document.getElementById("debtNotice").textContent = button.dataset.kind === "borrow" ? "保存后会自动记入账户余额：借入增加余额，登记还款时同步扣减余额。" : "保存后会自动记入账户余额：借出扣减余额，登记收款时同步增加余额。";
+          updateDebtKindFields(form);
+          updateDebtAmountField(form);
         }));
         form.querySelector("[data-cancel]").addEventListener("click", closeModal);
       }
@@ -860,7 +915,7 @@
         const debt = state.debts.find(item => item.id === id);
         if (!debt) { toast("这条借款记录已不存在"); return; }
         const principalTransaction = state.transactions.find(transaction =>
-          transaction.debtId === debt.id && ["借入款", "借出款"].includes(transaction.category)
+          transaction.debtId === debt.id && (transaction.creditPurchase || ["借入款", "借出款"].includes(transaction.category))
         );
         if (!principalTransaction) { toast("找不到对应的本金收支记录，无法安全修改"); return; }
         const dateTimeRequired = Boolean(debt.borrowedAtDateTime);
@@ -870,30 +925,33 @@
         const installmentDay = debt.installmentDay || Number(borrowedDate.slice(8));
         const installmentWeekday = Number.isInteger(debt.installmentWeekday) ? debt.installmentWeekday : new Date(Number(borrowedDate.slice(0, 4)), Number(borrowedDate.slice(5, 7)) - 1, Number(borrowedDate.slice(8))).getDay();
         openModal("编辑借款 / 分期", `<form id="modalForm"><div class="form-grid">
-          <div class="form-field full"><label>记录类型</label><div class="type-switch"><button type="button" class="${debt.kind === "borrow" ? "selected" : ""}" data-kind="borrow">我借入（欠款）</button><button type="button" class="${debt.kind === "lend" ? "selected" : ""}" data-kind="lend">我借出（待收）</button></div><input name="kind" type="hidden" value="${escapeHtml(debt.kind)}"></div>
-          <div class="form-field full"><label>对象 / 平台</label><input name="name" required maxlength="50" value="${escapeHtml(debt.name)}"></div>
-          <div class="form-field"><label>借款本金（元）</label><input name="amount" type="number" min="${Math.max(0.01, paid).toFixed(2)}" step="0.01" required value="${escapeHtml(debt.amount)}"></div>
-          <div class="form-field"><label>借款日期和时间</label><input name="borrowedAtDateTime" type="datetime-local" ${dateTimeRequired ? "required" : ""} value="${escapeHtml(debt.borrowedAtDateTime || "")}">${dateTimeRequired ? "" : '<div class="stat-note">旧记录未保存具体时间；如需更改日期，请填写实际日期和时间。</div>'}</div>
+          <div class="form-field full"><label>记录类型</label><div class="type-switch"><button type="button" class="${debt.kind === "borrow" ? "selected" : ""}" data-kind="borrow">借到现金</button><button type="button" class="${debt.kind === "credit" ? "selected" : ""}" data-kind="credit">信用消费（花呗/信用卡）</button><button type="button" class="${debt.kind === "lend" ? "selected" : ""}" data-kind="lend">借出给别人</button></div><input name="kind" type="hidden" value="${escapeHtml(debt.kind)}"></div>
+          <div class="form-field full"><label id="debtNameLabel">出借人 / 平台</label><input name="name" required maxlength="50" value="${escapeHtml(debt.name)}"></div>
+          <div class="form-field"><label data-debt-amount-label>借款金额（元）</label><input name="amount" type="number" step="0.01" required value="${escapeHtml(debt.kind === "lend" ? Math.abs(Number(debt.amount)) : -Math.abs(Number(debt.amount)))}"></div>
+          ${debtTypeFieldsMarkup(debt.kind, debt.category || "购物")}
+          <div class="form-field"><label id="debtDateLabel">借款日期和时间</label><input name="borrowedAtDateTime" type="datetime-local" ${dateTimeRequired ? "required" : ""} value="${escapeHtml(debt.borrowedAtDateTime || "")}">${dateTimeRequired ? "" : '<div class="stat-note">旧记录未保存具体时间；如需更改日期，请填写实际日期和时间。</div>'}</div>
           <div class="form-field"><label>到期还款日</label><input name="dueDate" type="date" value="${escapeHtml(debt.dueDate || "")}"></div>
-          <div class="form-field"><label>每期金额（选填）</label><input name="installment" type="number" min="0.01" step="0.01" value="${debt.installment ? escapeHtml(debt.installment) : ""}"></div>
-          <div class="form-field"><label>分期频率</label><select name="frequency"><option value="monthly" ${frequency === "monthly" ? "selected" : ""}>每月</option><option value="weekly" ${frequency === "weekly" ? "selected" : ""}>每周</option></select></div>
+          <div class="form-field" id="installmentAmountField" ${debt.kind === "credit" ? "hidden" : ""}><label>每期金额（选填）</label><input name="installment" type="number" min="0.01" step="0.01" value="${debt.installment ? escapeHtml(debt.installment) : ""}"></div>
+          <div class="form-field" id="installmentFrequencyField" ${debt.kind === "credit" ? "hidden" : ""}><label>分期频率</label><select name="frequency"><option value="monthly" ${frequency === "monthly" ? "selected" : ""}>每月</option><option value="weekly" ${frequency === "weekly" ? "selected" : ""}>每周</option></select></div>
           ${installmentScheduleFields(frequency, installmentDay, installmentWeekday)}
-          <div class="form-field full"><label>关联账户</label><select name="accountId">${accountOptions(debt.accountId)}</select></div>
-          <div class="form-field full"><label>备注（选填）</label><input name="note" maxlength="100" value="${escapeHtml(debt.note || "")}"></div>
-          <div class="notice full">已登记还款 / 收款：${money(paid)}。本金不能低于已登记金额；修改类型、日期或账户会同步更新本金收支记录。</div>
+          <div class="form-field full"><label id="debtAccountLabel">关联账户</label><select name="accountId">${accountOptions(debt.accountId)}</select></div>
+          <div class="form-field full"><label id="debtNoteLabel">备注（选填）</label><input name="note" maxlength="100" value="${escapeHtml(debt.note || "")}"></div>
+          <div class="notice full" id="debtNotice">已登记还款 / 收款：${money(paid)}。金额不能低于已登记金额；修改类型、日期或账户会同步更新记录。</div>
         </div><div class="form-actions"><button type="button" class="button" data-cancel>取消</button><button class="button primary">保存修改</button></div></form>`, data => {
           const name = String(data.get("name") || "").trim();
-          const amount = Number(data.get("amount"));
+          const enteredAmount = Number(data.get("amount"));
+          const amount = Math.abs(enteredAmount);
           const installmentValue = String(data.get("installment") || "").trim();
           const installment = installmentValue ? Number(installmentValue) : 0;
           const kind = data.get("kind");
+          const category = String(data.get("category") || "");
           const accountId = data.get("accountId");
           const borrowedAtDateTime = String(data.get("borrowedAtDateTime") || "");
           const frequency = data.get("frequency");
           const installmentDay = Number(data.get("installmentDay"));
           const installmentWeekday = Number(data.get("installmentWeekday"));
-          if (!name || !["borrow", "lend"].includes(kind) || !Number.isFinite(amount) || amount <= 0 || amount + 0.001 < paid || (installmentValue && (!Number.isFinite(installment) || installment <= 0)) || (installmentValue && frequency === "monthly" && (!Number.isInteger(installmentDay) || installmentDay < 1 || installmentDay > 31)) || (installmentValue && frequency === "weekly" && (!Number.isInteger(installmentWeekday) || installmentWeekday < 0 || installmentWeekday > 6)) || !accountById(accountId) || (borrowedAtDateTime && !isValidDateTime(borrowedAtDateTime)) || (dateTimeRequired && !borrowedAtDateTime)) {
-            toast("请检查名称、本金、日期时间、分期金额、还款日和账户");
+          if (!name || !["borrow", "credit", "lend"].includes(kind) || !Number.isFinite(enteredAmount) || (kind === "lend" ? enteredAmount <= 0 : enteredAmount >= 0) || (kind === "credit" && !category) || amount + 0.001 < paid || (installmentValue && (!Number.isFinite(installment) || installment <= 0)) || (installmentValue && frequency === "monthly" && (!Number.isInteger(installmentDay) || installmentDay < 1 || installmentDay > 31)) || (installmentValue && frequency === "weekly" && (!Number.isInteger(installmentWeekday) || installmentWeekday < 0 || installmentWeekday > 6)) || !accountById(accountId) || (borrowedAtDateTime && !isValidDateTime(borrowedAtDateTime)) || (dateTimeRequired && !borrowedAtDateTime)) {
+            toast("借款/信用消费请填负数、借出请填正数，并检查名称、分类、日期时间、分期金额和账户");
             return;
           }
           const previousKind = debt.kind;
@@ -903,11 +961,12 @@
           debt.borrowedAtDateTime = borrowedAtDateTime || undefined;
           if (borrowedAtDateTime) debt.borrowedAt = borrowedAtDateTime.slice(0, 10);
           debt.dueDate = String(data.get("dueDate") || "");
-          debt.installment = installment;
+          debt.category = kind === "credit" ? category : undefined;
+          debt.installment = kind === "credit" ? 0 : installment;
           debt.frequency = frequency;
           delete debt.installmentDay;
           delete debt.installmentWeekday;
-          if (installment) {
+          if (kind !== "credit" && installment) {
             if (frequency === "monthly") debt.installmentDay = installmentDay;
             else debt.installmentWeekday = installmentWeekday;
           }
@@ -915,9 +974,11 @@
           debt.note = String(data.get("note") || "").trim();
           principalTransaction.type = kind === "borrow" ? "income" : "expense";
           principalTransaction.amount = amount;
-          principalTransaction.accountId = accountId;
-          principalTransaction.category = kind === "borrow" ? "借入款" : "借出款";
-          principalTransaction.note = `${kind === "borrow" ? "借入" : "借出"}：${name}`;
+          principalTransaction.accountId = kind === "credit" ? "" : accountId;
+          principalTransaction.category = kind === "borrow" ? "借入款" : kind === "credit" ? category : "借出款";
+          principalTransaction.note = kind === "credit" ? `${name}消费${debt.note ? `：${debt.note}` : ""}` : `${kind === "borrow" ? "借入" : "借出"}：${name}`;
+          if (kind === "credit") principalTransaction.creditPurchase = true;
+          else delete principalTransaction.creditPurchase;
           if (borrowedAtDateTime) {
             principalTransaction.date = borrowedAtDateTime.slice(0, 10);
             principalTransaction.dateTime = borrowedAtDateTime;
@@ -925,40 +986,47 @@
             principalTransaction.date = debt.borrowedAt;
           }
           state.transactions.filter(transaction => transaction.debtId === debt.id && transaction.id !== principalTransaction.id).forEach(transaction => {
-            transaction.type = kind === "borrow" ? "expense" : "income";
-            transaction.category = kind === "borrow" ? "还款" : "收回借款";
-            transaction.note = `${kind === "borrow" ? "还款" : "收款"}：${name}`;
+            transaction.type = kind === "lend" ? "income" : "expense";
+            transaction.category = kind === "lend" ? "收回借款" : "还款";
+            transaction.note = `${kind === "lend" ? "收款" : "还款"}：${name}`;
+            if (kind === "credit") transaction.creditDebtPayment = true;
+            else delete transaction.creditDebtPayment;
           });
           persist(); closeModal(); render(); toast("借款记录已更新");
         });
         const form = document.getElementById("modalForm");
+        updateDebtKindFields(form);
+        updateDebtAmountField(form, paid);
         form.elements.frequency.addEventListener("change", () => {
           const weekly = form.elements.frequency.value === "weekly";
-          document.getElementById("installmentDayField").hidden = weekly;
-          document.getElementById("installmentWeekdayField").hidden = !weekly;
+          document.getElementById("installmentDayField").hidden = form.elements.kind.value === "credit" || weekly;
+          document.getElementById("installmentWeekdayField").hidden = form.elements.kind.value === "credit" || !weekly;
         });
         form.querySelectorAll("[data-kind]").forEach(button => button.addEventListener("click", () => {
           form.querySelectorAll("[data-kind]").forEach(item => item.classList.toggle("selected", item === button));
           form.elements.kind.value = button.dataset.kind;
+          updateDebtKindFields(form);
+          updateDebtAmountField(form, paid);
         }));
         form.querySelector("[data-cancel]").addEventListener("click", closeModal);
       }
       function repayDebt(id) {
         const debt = state.debts.find(d => d.id === id);
         if (!debt) return;
+        const isOwed = debt.kind !== "lend";
         const remaining = debtRemaining(debt), defaultAmount = debt.installment ? Math.min(debt.installment, remaining) : remaining;
-        openModal(debt.kind === "borrow" ? "登记还款" : "登记收款", `<form id="modalForm"><div class="form-grid">
-          <div class="form-field"><label>本次${debt.kind === "borrow" ? "还款" : "收款"}金额（元）</label><input name="amount" type="number" min="0.01" max="${remaining}" step="0.01" value="${defaultAmount}" required></div>
+        openModal(isOwed ? "登记还款" : "登记收款", `<form id="modalForm"><div class="form-grid">
+          <div class="form-field"><label>本次${isOwed ? "还款" : "收款"}金额（元）</label><input name="amount" type="number" min="0.01" max="${remaining}" step="0.01" value="${defaultAmount}" required></div>
           <div class="form-field"><label>日期和时间</label><input name="dateTime" type="datetime-local" value="${localDateTime(new Date())}" required></div>
           <div class="form-field full"><label>关联账户</label><select name="accountId">${accountOptions(debt.accountId)}</select></div>
-          <div class="notice full">剩余未还：${money(remaining)}。本次登记会同步更新账户余额和剩余欠款。</div>
+          <div class="notice full">剩余未还：${money(remaining)}。本次登记会同步更新账户余额和剩余欠款。${debt.kind === "credit" ? "信用消费已在购物时计入支出，本次还款只扣账户余额，不重复计入支出。" : ""}</div>
         </div><div class="form-actions"><button type="button" class="button" data-cancel>取消</button><button class="button primary">确认登记</button></div></form>`, data => {
           const amount = Number(data.get("amount")), accountId = data.get("accountId"), dateTimeValue = String(data.get("dateTime") || "");
           if (!Number.isFinite(amount) || amount <= 0 || amount > remaining + 0.001 || !accountById(accountId) || !isValidDateTime(dateTimeValue)) { toast("金额超出剩余欠款，或日期时间、账户无效"); return; }
           const date = dateTimeValue.slice(0, 10);
           debt.payments = debt.payments || [];
           debt.payments.push({ amount, date, dateTime: dateTimeValue });
-          state.transactions.push({ id: makeId(), type: debt.kind === "borrow" ? "expense" : "income", amount, accountId, category: debt.kind === "borrow" ? "还款" : "收回借款", note: `${debt.kind === "borrow" ? "还款" : "收款"}：${debt.name}`, date, dateTime: dateTimeValue, debtId: debt.id });
+          state.transactions.push({ id: makeId(), type: isOwed ? "expense" : "income", amount, accountId, category: isOwed ? "还款" : "收回借款", note: `${isOwed ? "还款" : "收款"}：${debt.name}`, date, dateTime: dateTimeValue, debtId: debt.id, ...(debt.kind === "credit" ? { creditDebtPayment: true } : {}) });
           persist(); closeModal(); render(); toast("已登记");
         });
         document.querySelector("[data-cancel]").addEventListener("click", closeModal);
@@ -1173,7 +1241,7 @@
         try {
           const data = JSON.parse(await file.text());
           if (!data || !Array.isArray(data.accounts) || !Array.isArray(data.transactions) || !Array.isArray(data.debts)) throw new Error("文件结构不正确");
-          if (!data.accounts.every(a => a.id && a.name && Number.isFinite(Number(a.opening))) || !data.transactions.every(t => t.id && ["income", "expense", "transfer"].includes(t.type) && Number(t.amount) > 0) || !data.debts.every(d => d.id && Number(d.amount) > 0 && ["borrow", "lend"].includes(d.kind))) throw new Error("备份数据校验失败");
+          if (!data.accounts.every(a => a.id && a.name && Number.isFinite(Number(a.opening))) || !data.transactions.every(t => t.id && ["income", "expense", "transfer"].includes(t.type) && Number(t.amount) > 0) || !data.debts.every(d => d.id && Number(d.amount) > 0 && ["borrow", "credit", "lend"].includes(d.kind))) throw new Error("备份数据校验失败");
           if (!confirm("导入将替换当前账本数据，建议先导出当前备份。确定继续吗？")) return;
           state = { accounts: data.accounts, transactions: data.transactions, debts: data.debts };
           persist(); render(); toast("备份导入成功");

@@ -117,6 +117,14 @@
     .debt-summary .stat-number { font-size: 20px; }
     .debt-list { display: grid; gap: 11px; }
     .debt-card { border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 16px; }
+    .savings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+    .savings-card { border: 1px solid var(--line); border-radius: 12px; padding: 17px; background: white; }
+    .savings-card-head, .savings-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .savings-card-head strong { font-size: 15px; }
+    .savings-balance { margin: 18px 0 4px; font-size: 25px; font-weight: 600; }
+    .savings-progress { height: 8px; margin: 12px 0 7px; background: #edf2ef; border-radius: 99px; overflow: hidden; }
+    .savings-progress-fill { height: 100%; background: var(--blue); border-radius: inherit; }
+    .savings-actions { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 15px; }
     .debt-title { font-weight: 600; }
     .debt-kind { display: inline-block; border-radius: 20px; padding: 3px 8px; font-size: 10px; color: var(--orange); background: var(--orange-soft); margin-right: 7px; }
     .debt-kind.lend { color: var(--blue); background: var(--blue-soft); }
@@ -270,6 +278,7 @@
       .debt-summary .stat { padding: 13px 15px; display: flex; justify-content: space-between; align-items: center; }
       .debt-summary .stat-number { margin: 0; }
       .debt-card { grid-template-columns: 1fr; gap: 10px; }
+      .savings-card { padding: 14px; }
       .debt-right { display: flex; align-items: center; justify-content: space-between; text-align: left; }
       .debt-balance small { display: inline; margin-left: 4px; }
       .debt-actions { margin: 0; }
@@ -283,6 +292,12 @@
       .account-details-summary { gap: 5px; }
       .account-details-stat { padding: 8px; }
       .account-details-stat strong { font-size: 12px; }
+      .savings-grid { grid-template-columns: minmax(0, 1fr); }
+      .savings-card-head { align-items: flex-start; }
+      .savings-card-head .stat-note { text-align: right; overflow-wrap: anywhere; }
+      .savings-card-foot { align-items: flex-start; flex-direction: column; }
+      .savings-actions { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .savings-actions .button { min-width: 0; padding: 8px; white-space: normal; }
     }
     @media (max-width: 430px) {
       body { font-size: 16px; }
@@ -393,6 +408,10 @@
             <div class="chart" id="chart"></div>
           </section>
         </div>
+        <section class="panel" style="margin-bottom:18px">
+          <div class="panel-head"><div><h2>存钱计划</h2><div class="stat-note">目标进度按关联账户余额计算，存取款通过账户转账记录。</div></div><button class="button primary" id="addSavingsGoal">＋ 新建目标</button></div>
+          <div class="savings-grid" id="savingsList"></div>
+        </section>
         <section class="panel">
           <div class="panel-head"><h2>最近记录</h2><button class="text-link" data-go="transactions">全部明细 →</button></div>
           <div class="transaction-list" id="recentTransactions"></div>
@@ -437,7 +456,8 @@
       const initialState = () => ({
         accounts: [{ id: "cash", name: "纸币现金", type: "现金", opening: 0 }],
         transactions: [],
-        debts: []
+        debts: [],
+        savingsGoals: []
       });
       let state;
       try {
@@ -445,6 +465,7 @@
         state = saved ? JSON.parse(saved) : initialState();
         if (!state || !Array.isArray(state.accounts) || !Array.isArray(state.transactions) || !Array.isArray(state.debts)) throw new Error("账本数据格式不正确");
         if (!state.accounts.length) state.accounts.push(...initialState().accounts);
+        if (!Array.isArray(state.savingsGoals)) state.savingsGoals = [];
       } catch (error) {
         console.error("读取账本失败：", error);
         state = initialState();
@@ -466,6 +487,17 @@
       };
       const debtPaid = debt => (debt.payments || []).reduce((sum, p) => sum + Number(p.amount), 0);
       const debtRemaining = debt => Math.max(0, Number(debt.amount) - debtPaid(debt));
+      const installmentPeriodsRemaining = debt => {
+        const installment = Number(debt.installment);
+        if (!Number.isFinite(installment) || installment <= 0) return 0;
+        const remaining = debtRemaining(debt);
+        if (remaining <= 0) return 0;
+        const count = Number(debt.installmentCount);
+        if (Number.isInteger(count) && count > 0) {
+          return Math.max(0, count - Math.floor((debtPaid(debt) + 0.001) / installment));
+        }
+        return Math.ceil((remaining - 0.001) / installment);
+      };
       const fmtDate = value => {
         const match = typeof value === "string" && value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
         if (!match) return "未设置";
@@ -498,7 +530,7 @@
         document.getElementById("cashAdd").hidden = page !== "overview";
       };
       const accountMarkup = account => {
-        const icons = { 现金: "💵", 支付宝: "🔷", 微信: "💬", 银行卡: "💳", 信用卡: "💳", 投资: "📈", 其他: "👛" };
+        const icons = { 现金: "💵", 支付宝: "🔷", 微信: "💬", 银行卡: "💳", 信用卡: "💳", 投资: "📈", 存款: "🏦", 其他: "👛" };
         return `<button type="button" class="account-card" data-account-details="${escapeHtml(account.id)}" aria-label="查看${escapeHtml(account.name)}的收支明细"><span class="account-top"><span class="account-icon" aria-hidden="true">${icons[account.type] || "👛"}</span><span>${escapeHtml(account.name)}</span></span><span class="account-amount">${money(accountBalance(account.id))}</span><span class="stat-note">点击查看收支明细 →</span></button>`;
       };
       const accountManagementMarkup = account => `<div class="account-management-item">${accountMarkup(account)}<div class="account-management-actions"><button class="tx-edit" data-edit-account="${escapeHtml(account.id)}" aria-label="编辑${escapeHtml(account.name)}">编辑</button>${account.id === "cash" ? '<span class="stat-note">默认账户不可删除</span>' : `<button class="tx-edit danger" data-delete-account="${escapeHtml(account.id)}" aria-label="删除${escapeHtml(account.name)}">删除</button>`}</div></div>`;
@@ -567,9 +599,16 @@
       const installmentScheduleFields = (frequency, installmentDay, installmentWeekday) => `
         <div class="form-field" id="installmentDayField" ${frequency === "weekly" ? "hidden" : ""}><label>每月还款日</label><input name="installmentDay" type="number" min="1" max="31" value="${escapeHtml(installmentDay)}"></div>
         <div class="form-field" id="installmentWeekdayField" ${frequency === "weekly" ? "" : "hidden"}><label>每周还款日</label><select name="installmentWeekday">${["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"].map((day, value) => `<option value="${value}" ${Number(installmentWeekday) === value ? "selected" : ""}>${day}</option>`).join("")}</select></div>`;
+      const installmentPeriodNumber = (debt, date) => {
+        const start = dateKey(debt.borrowedAt);
+        if (debt.frequency === "weekly") {
+          return Math.floor((Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8))) - Date.UTC(Number(start.slice(0, 4)), Number(start.slice(5, 7)) - 1, Number(start.slice(8)))) / (7 * 24 * 60 * 60 * 1000));
+        }
+        return (Number(date.slice(0, 4)) - Number(start.slice(0, 4))) * 12 + Number(date.slice(5, 7)) - Number(start.slice(5, 7));
+      };
       const scheduledInstallmentsInMonth = (debt, month) => {
         const amount = Number(debt.installment);
-        if (debt.kind !== "borrow" || !Number.isFinite(amount) || amount <= 0 || !/^\d{4}-\d{2}$/.test(month)) return [];
+        if (!["borrow", "credit"].includes(debt.kind) || !Number.isFinite(amount) || amount <= 0 || !/^\d{4}-\d{2}$/.test(month)) return [];
         const start = dateKey(debt.borrowedAt);
         if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) return [];
         const [year, monthNumber] = month.split("-").map(Number);
@@ -585,11 +624,13 @@
           if (date <= start || (debt.dueDate && date > debt.dueDate)) continue;
           if (debt.frequency === "weekly") {
             const weekday = Number.isInteger(debt.installmentWeekday) ? debt.installmentWeekday : new Date(Number(start.slice(0, 4)), Number(start.slice(5, 7)) - 1, Number(start.slice(8))).getDay();
-            if (date >= firstWeeklyDue && Number.isInteger(weekday) && weekday >= 0 && weekday <= 6 && new Date(year, monthNumber - 1, day).getDay() === weekday) dueDates.push(date);
+            const periodNumber = installmentPeriodNumber(debt, date);
+            if (date >= firstWeeklyDue && Number.isInteger(weekday) && weekday >= 0 && weekday <= 6 && new Date(year, monthNumber - 1, day).getDay() === weekday && (!Number.isInteger(Number(debt.installmentCount)) || Number(debt.installmentCount) <= 0 || periodNumber <= Number(debt.installmentCount))) dueDates.push(date);
           } else {
             const dueDay = Number(debt.installmentDay) || Number(start.slice(8));
             const actualDueDay = Math.min(dueDay, lastOfMonth.getDate());
-            if (date >= nextMonthStart && day === actualDueDay) dueDates.push(date);
+            const periodNumber = installmentPeriodNumber(debt, date);
+            if (date >= nextMonthStart && day === actualDueDay && (!Number.isInteger(Number(debt.installmentCount)) || Number(debt.installmentCount) <= 0 || periodNumber <= Number(debt.installmentCount))) dueDates.push(date);
           }
         }
         return dueDates;
@@ -602,11 +643,20 @@
         const paidBeforeMonth = (debt.payments || []).filter(payment => dateKey(payment.date) < monthStart).reduce((sum, payment) => sum + Number(payment.amount), 0);
         const paidThisMonth = (debt.payments || []).filter(payment => dateKey(payment.date) >= monthStart && dateKey(payment.date) < nextMonthStart).reduce((sum, payment) => sum + Number(payment.amount), 0);
         const principalAtMonthStart = Math.max(0, Number(debt.amount) - paidBeforeMonth);
-        const scheduledAmount = Math.min(principalAtMonthStart, Number(debt.installment) * dueDates.length);
+        const installmentCount = Number(debt.installmentCount);
+        const scheduledAmount = Math.min(principalAtMonthStart, dueDates.reduce((sum, date) => {
+          const periodNumber = installmentPeriodNumber(debt, date);
+          const amount = Number.isInteger(installmentCount) && installmentCount > 0 && periodNumber === installmentCount
+            ? Math.max(0, Number(debt.amount) - Number(debt.installment) * (installmentCount - 1))
+            : Number(debt.installment);
+          return sum + amount;
+        }, 0));
         const outstanding = Math.max(0, scheduledAmount - paidThisMonth);
         return outstanding ? [{ debt, dueDates, amount: outstanding, scheduledAmount, paidThisMonth }] : [];
       });
       const scheduledExpenseForMonth = month => scheduledExpenseItemsForMonth(month).reduce((total, item) => total + item.amount, 0);
+      const isInstallmentPurchase = transaction => transaction.creditPurchase && state.debts.some(debt => debt.id === transaction.debtId && Number(debt.installment) > 0);
+      const actualExpensesForMonth = transactions => transactions.filter(transaction => transaction.type === "expense" && !isInstallmentPurchase(transaction));
       function updateDebtAmountField(form, paid = 0) {
         const amountField = form.elements.amount;
         const amount = Number(amountField.value);
@@ -628,7 +678,8 @@
         document.getElementById("today").textContent = now.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" });
         document.getElementById("monthName").textContent = now.toLocaleDateString("zh-CN", { month: "long" }) + "收支情况";
         const assets = state.accounts.reduce((s, a) => s + accountBalance(a.id), 0);
-        const owed = state.debts.filter(d => d.kind === "borrow" || d.kind === "credit").reduce((s, d) => s + debtRemaining(d), 0);
+        const owed = state.debts.filter(d => (d.kind === "borrow" || d.kind === "credit") && !(d.kind === "credit" && Number(d.installment) > 0)).reduce((s, d) => s + debtRemaining(d), 0)
+          + scheduledExpenseItemsForMonth(month).filter(item => item.debt.kind === "credit").reduce((s, item) => s + item.amount, 0);
         const lent = state.debts.filter(d => d.kind === "lend").reduce((s, d) => s + debtRemaining(d), 0);
         const cashAccount = accountById("cash") || state.accounts.find(a => a.type === "现金");
         const investments = state.accounts.filter(a => a.type === "投资").reduce((s, a) => s + accountBalance(a.id), 0);
@@ -638,7 +689,7 @@
         renderCash(cashAccount);
         const monthTx = state.transactions.filter(t => dateKey(t.date).slice(0, 7) === month);
         const income = monthTx.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
-        const expense = monthTx.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0) + scheduledExpenseForMonth(month);
+        const expense = actualExpensesForMonth(monthTx).reduce((s, t) => s + Number(t.amount), 0) + scheduledExpenseForMonth(month);
         document.getElementById("monthIncome").textContent = money(income);
         document.getElementById("monthExpense").textContent = money(expense);
         document.getElementById("monthBalance").textContent = money(income - expense);
@@ -653,11 +704,12 @@
         const months = Array.from({ length: 6 }, (_, i) => { const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; });
         const sums = months.map(m => {
           const list = state.transactions.filter(t => dateKey(t.date).startsWith(m));
-          return [list.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0), list.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0) + scheduledExpenseForMonth(m)];
+          return [list.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0), actualExpensesForMonth(list).reduce((s, t) => s + Number(t.amount), 0) + scheduledExpenseForMonth(m)];
         });
         const max = Math.max(1, ...sums.flat());
         chartEl.innerHTML = months.map((m, i) => `<div class="chart-col"><div class="bar-wrap"><i class="bar" title="收入 ${money(sums[i][0])}" style="height:${Math.max(3, sums[i][0] / max * 100)}%"></i><i class="bar out" title="支出 ${money(sums[i][1])}" style="height:${Math.max(3, sums[i][1] / max * 100)}%"></i></div>${Number(m.slice(5))}月</div>`).join("");
         renderDebts(owed, lent);
+        renderSavings();
       }
       function renderDebts(owed, lent) {
         const overdue = state.debts.filter(d => debtRemaining(d) > 0 && d.dueDate && d.dueDate < today()).length;
@@ -669,10 +721,23 @@
           const remaining = debtRemaining(d), isBorrow = d.kind === "borrow", isCredit = d.kind === "credit";
           const overdueFlag = remaining > 0 && d.dueDate && d.dueDate < today();
           const paid = (d.payments || []).map(p => `${fmtDateTime(p.dateTime, p.date)} ${money(p.amount)}`).join("、");
-          return `<article class="debt-card"><div><div class="debt-title"><span class="debt-kind ${isBorrow || isCredit ? "" : "lend"}">${isBorrow ? "我借入" : isCredit ? "信用消费" : "我借出"}</span>${escapeHtml(d.name)}</div><div class="debt-meta">${isCredit ? `消费时间：${fmtDateTime(d.borrowedAtDateTime, d.borrowedAt)}　·　分类：${escapeHtml(d.category || "购物")}　·　消费金额：${money(d.amount)}` : `借款时间：${fmtDateTime(d.borrowedAtDateTime, d.borrowedAt)}　·　本金：${money(d.amount)}`}<br>到期还款：<span style="color:${overdueFlag ? "var(--red)" : "inherit"}">${fmtDate(d.dueDate)}${overdueFlag ? "（已逾期）" : ""}</span>${d.installment ? `　·　每期 ${money(d.installment)}${d.frequency === "weekly" ? " / 周" : " / 月"}` : ""}${d.note ? `<br>备注：${escapeHtml(d.note)}` : ""}${paid ? `<br>已登记：${paid}` : ""}</div></div><div class="debt-right"><div class="debt-balance">${money(remaining)}<small>${remaining === 0 ? "已结清" : "剩余未还"}</small></div><div class="debt-actions"><button class="button subtle" data-edit-debt="${escapeHtml(d.id)}">编辑</button>${remaining > 0 ? `<button class="button" data-repay="${escapeHtml(d.id)}">${isBorrow || isCredit ? "登记还款" : "登记收款"}</button>` : ""}<button class="button subtle danger" data-delete-debt="${escapeHtml(d.id)}" aria-label="删除记录">删除</button></div></div></article>`;
+          const installmentCount = Number(d.installmentCount);
+          const installmentInfo = d.installment ? `${Number.isInteger(installmentCount) && installmentCount > 0 ? `还剩 ${installmentPeriodsRemaining(d)} / ${installmentCount} 期` : `预计还剩 ${installmentPeriodsRemaining(d)} 期`}，每期 ${money(d.installment)}${d.frequency === "weekly" ? " / 周" : " / 月"}` : "";
+          return `<article class="debt-card"><div><div class="debt-title"><span class="debt-kind ${isBorrow || isCredit ? "" : "lend"}">${isBorrow ? "我借入" : isCredit ? "信用消费" : "我借出"}</span>${escapeHtml(d.name)}</div><div class="debt-meta">${isCredit ? `消费时间：${fmtDateTime(d.borrowedAtDateTime, d.borrowedAt)}　·　分类：${escapeHtml(d.category || "购物")}　·　消费金额：${money(d.amount)}` : `借款时间：${fmtDateTime(d.borrowedAtDateTime, d.borrowedAt)}　·　本金：${money(d.amount)}`}<br>到期还款：<span style="color:${overdueFlag ? "var(--red)" : "inherit"}">${fmtDate(d.dueDate)}${overdueFlag ? "（已逾期）" : ""}</span>${installmentInfo ? `<br>分期：${installmentInfo}` : ""}${d.note ? `<br>备注：${escapeHtml(d.note)}` : ""}${paid ? `<br>已登记：${paid}` : ""}</div></div><div class="debt-right"><div class="debt-balance">${money(remaining)}<small>${remaining === 0 ? "已结清" : "剩余未还"}</small></div><div class="debt-actions"><button class="button subtle" data-edit-debt="${escapeHtml(d.id)}">编辑</button>${remaining > 0 ? `<button class="button" data-repay="${escapeHtml(d.id)}">${isBorrow || isCredit ? "登记还款" : "登记收款"}</button>` : ""}<button class="button subtle danger" data-delete-debt="${escapeHtml(d.id)}" aria-label="删除记录">删除</button></div></div></article>`;
         }).join("") : '<div class="empty">暂无借款或分期记录</div>';
       }
+      function renderSavings() {
+        const list = document.getElementById("savingsList");
+        list.innerHTML = state.savingsGoals.length ? state.savingsGoals.map(goal => {
+          const account = accountById(goal.accountId);
+          const balance = account ? accountBalance(account.id) : 0;
+          const target = Number(goal.targetAmount);
+          const progress = target > 0 ? Math.min(100, Math.max(0, balance / target * 100)) : 0;
+          return `<article class="savings-card"><div class="savings-card-head"><strong>${escapeHtml(goal.name)}</strong><span class="stat-note">${escapeHtml(account ? account.name : "账户已删除")}</span></div><div class="savings-balance">${money(balance)}</div><div class="stat-note">目标 ${money(target)} · 已完成 ${progress.toFixed(1)}%</div><div class="savings-progress" role="progressbar" aria-label="${escapeHtml(goal.name)}存钱进度" aria-valuenow="${progress.toFixed(0)}" aria-valuemin="0" aria-valuemax="100"><div class="savings-progress-fill" style="width:${progress}%"></div></div><div class="savings-card-foot"><span class="stat-note">还差 ${money(Math.max(0, target - balance))}</span><div class="savings-actions"><button class="button primary" data-save-to="${escapeHtml(goal.id)}">存入</button><button class="button" data-save-from="${escapeHtml(goal.id)}">取出</button><button class="button subtle" data-edit-goal="${escapeHtml(goal.id)}">编辑</button><button class="button subtle danger" data-delete-goal="${escapeHtml(goal.id)}">删除目标</button></div></div></article>`;
+        }).join("") : '<div class="empty">还没有存钱目标。先创建“存款”账户，再设置你的目标吧。<br><button class="button" type="button" data-go-savings-accounts>前往账户管理</button></div>';
+      }
       const accountOptions = selected => state.accounts.map(a => `<option value="${escapeHtml(a.id)}" ${a.id === selected ? "selected" : ""}>${escapeHtml(a.name)}</option>`).join("");
+      const savingsAccountOptions = selected => state.accounts.filter(account => account.type !== "信用卡").map(account => `<option value="${escapeHtml(account.id)}" ${account.id === selected ? "selected" : ""}>${escapeHtml(account.name)}（${escapeHtml(account.type)}）</option>`).join("");
       function openModal(title, content, onSubmit) {
         const backdrop = document.getElementById("modalBackdrop");
         document.getElementById("modalTitle").textContent = title;
@@ -713,7 +778,7 @@
         const monthLabel = `${month.slice(0, 4)}年${Number(month.slice(5, 7))}月`;
         const transactions = state.transactions.filter(transaction => dateKey(transaction.date).startsWith(month));
         const incomes = transactions.filter(transaction => transaction.type === "income");
-        const expenses = transactions.filter(transaction => transaction.type === "expense");
+        const expenses = actualExpensesForMonth(transactions);
         const incomeTotal = incomes.reduce((total, transaction) => total + Number(transaction.amount), 0);
         const actualExpenseTotal = expenses.reduce((total, transaction) => total + Number(transaction.amount), 0);
         const scheduledItems = scheduledExpenseItemsForMonth(month);
@@ -791,7 +856,7 @@
       function addAccount() {
         openModal("新增账户", `<form id="modalForm"><div class="form-grid">
           <div class="form-field full"><label>账户名称</label><input name="name" required maxlength="30" placeholder="例如：招商银行卡"></div>
-          <div class="form-field"><label>账户类型</label><select name="type"><option>现金</option><option>支付宝</option><option>微信</option><option>银行卡</option><option>信用卡</option><option>其他</option></select></div>
+          <div class="form-field"><label>账户类型</label><select name="type"><option>现金</option><option>支付宝</option><option>微信</option><option>银行卡</option><option>信用卡</option><option>存款</option><option>其他</option></select></div>
           <div class="form-field"><label>初始余额（元）</label><input name="opening" type="number" step="0.01" value="0" required></div>
         </div><div class="form-actions"><button type="button" class="button" data-cancel>取消</button><button class="button primary">创建账户</button></div></form>`, data => {
           const name = String(data.get("name")).trim(), opening = Number(data.get("opening"));
@@ -805,7 +870,7 @@
       function editAccount(id) {
         const account = accountById(id);
         if (!account) { toast("账户不存在或已删除"); return; }
-        const types = ["现金", "支付宝", "微信", "银行卡", "信用卡", "投资", "其他"];
+        const types = ["现金", "支付宝", "微信", "银行卡", "信用卡", "投资", "存款", "其他"];
         if (!types.includes(account.type)) types.unshift(account.type);
         openModal("编辑账户", `<form id="modalForm"><div class="form-grid">
           <div class="form-field full"><label>账户名称</label><input name="name" required maxlength="30" value="${escapeHtml(account.name)}"></div>
@@ -830,25 +895,85 @@
         if (account.id === "cash") { toast("默认现金账户不能删除"); return; }
         const hasTransactions = state.transactions.some(transaction => transaction.accountId === id || transaction.toAccountId === id);
         const hasDebts = state.debts.some(debt => debt.accountId === id);
-        if (hasTransactions || hasDebts) { toast("该账户已关联收支或借款记录，暂不能删除"); return; }
+        const hasSavingsGoal = state.savingsGoals.some(goal => goal.accountId === id);
+        if (hasTransactions || hasDebts || hasSavingsGoal) { toast("该账户已关联收支、借款或存钱目标，暂不能删除"); return; }
         if (!confirm(`确定删除账户「${account.name}」？此操作不可撤销。`)) return;
         state.accounts = state.accounts.filter(item => item.id !== id);
         persist(); render(); toast("账户已删除");
       }
+      function editSavingsGoal(id = "") {
+        const goal = id ? state.savingsGoals.find(item => item.id === id) : null;
+        if (id && !goal) { toast("存钱目标不存在或已删除"); return; }
+        const eligibleAccounts = state.accounts.filter(account => account.type !== "信用卡");
+        if (!eligibleAccounts.length) { toast("请先在账户管理中新增存款账户"); setPage("accounts"); return; }
+        const accountChoices = savingsAccountOptions(goal?.accountId || eligibleAccounts[0].id);
+        openModal(goal ? "编辑存钱目标" : "新建存钱目标", `<form id="modalForm"><div class="form-grid">
+          <div class="form-field full"><label>存钱目标</label><input name="name" required maxlength="50" placeholder="例如：旅行基金" value="${escapeHtml(goal?.name || "")}"></div>
+          <div class="form-field"><label>目标金额（元）</label><input name="targetAmount" type="number" min="0.01" step="0.01" required placeholder="例如：10000" value="${escapeHtml(goal?.targetAmount || "")}"></div>
+          <div class="form-field"><label>关联存款账户</label><select name="accountId" required>${accountChoices}</select></div>
+          <div class="notice full">目标进度按所选账户当前余额计算。存入或取出会记为账户间转账，不会重复计入总资产或收支。</div>
+        </div><div class="form-actions"><button type="button" class="button" data-cancel>取消</button><button class="button primary">${goal ? "保存修改" : "创建目标"}</button></div></form>`, data => {
+          const name = String(data.get("name") || "").trim();
+          const targetAmount = Number(data.get("targetAmount"));
+          const accountId = String(data.get("accountId") || "");
+          const account = accountById(accountId);
+          if (!name || !Number.isFinite(targetAmount) || targetAmount <= 0 || !account || account.type === "信用卡") { toast("请填写有效的目标名称、金额和存款账户"); return; }
+          if (state.savingsGoals.some(item => item.id !== goal?.id && item.accountId === accountId)) { toast("这个账户已关联其他存钱目标，请选择另一个账户"); return; }
+          if (goal) Object.assign(goal, { name, targetAmount, accountId });
+          else state.savingsGoals.push({ id: makeId(), name, targetAmount, accountId });
+          persist(); closeModal(); render(); toast(goal ? "存钱目标已更新" : "存钱目标已创建");
+        });
+        document.querySelector("[data-cancel]").addEventListener("click", closeModal);
+      }
+      function transferSavings(id, direction) {
+        const goal = state.savingsGoals.find(item => item.id === id);
+        if (!goal) { toast("存钱目标不存在或已删除"); return; }
+        const savingsAccount = accountById(goal.accountId);
+        if (!savingsAccount) { toast("关联的存款账户不存在，请编辑目标重新关联"); return; }
+        const otherAccounts = state.accounts.filter(account => account.id !== savingsAccount.id && account.type !== "信用卡");
+        if (!otherAccounts.length) { toast("请先新增另一个可转账账户"); setPage("accounts"); return; }
+        const label = direction === "deposit" ? "存入" : "取出";
+        const sourceAccountId = direction === "deposit" ? otherAccounts[0].id : savingsAccount.id;
+        const balance = accountBalance(sourceAccountId);
+        openModal(`${label} · ${goal.name}`, `<form id="modalForm"><div class="form-grid">
+          <div class="form-field"><label>金额（元）</label><input name="amount" type="number" min="0.01" max="${Math.max(0, balance)}" step="0.01" required placeholder="0.00"></div>
+          <div class="form-field"><label>${direction === "deposit" ? "从哪个账户转入" : "取到哪个账户"}</label><select name="otherAccountId">${otherAccounts.map(account => `<option value="${escapeHtml(account.id)}">${escapeHtml(account.name)}（${escapeHtml(account.type)}）</option>`).join("")}</select></div>
+          <div class="notice full">${direction === "deposit" ? `从所选账户转入 ${escapeHtml(savingsAccount.name)}。` : `从 ${escapeHtml(savingsAccount.name)} 转到所选账户。`}当前可用余额 ${money(balance)}；转账不会改变总资产。</div>
+        </div><div class="form-actions"><button type="button" class="button" data-cancel>取消</button><button class="button primary">确认${label}</button></div></form>`, data => {
+          const amount = Number(data.get("amount"));
+          const otherAccount = accountById(String(data.get("otherAccountId") || ""));
+          if (!Number.isFinite(amount) || amount <= 0 || !otherAccount || otherAccount.id === savingsAccount.id) { toast("请填写有效金额和转账账户"); return; }
+          const sourceAccount = direction === "deposit" ? otherAccount : savingsAccount;
+          if (amount > accountBalance(sourceAccount.id) + 0.001) { toast("转出金额不能超过账户当前余额"); return; }
+          const dateTime = localDateTime(new Date());
+          state.transactions.push({
+            id: makeId(),
+            type: "transfer",
+            amount,
+            accountId: direction === "deposit" ? otherAccount.id : savingsAccount.id,
+            toAccountId: direction === "deposit" ? savingsAccount.id : otherAccount.id,
+            category: "",
+            note: `${label}存款：${goal.name}`,
+            date: dateTime.slice(0, 10),
+            dateTime
+          });
+          persist(); closeModal(); render(); toast(`${label}成功`);
+        });
+        document.querySelector("[data-cancel]").addEventListener("click", closeModal);
+      }
       function debtTypeFieldsMarkup(kind, selectedCategory = "购物") {
         const categories = ["餐饮", "日用", "交通", "购物", "住房", "医疗", "其他"];
         return `<div class="form-field" id="creditCategoryField" ${kind === "credit" ? "" : "hidden"}><label>消费分类</label><select name="category">${categories.map(category => `<option ${category === selectedCategory ? "selected" : ""}>${category}</option>`).join("")}</select></div>
-          <div class="form-field" id="installmentAmountField" ${kind === "credit" ? "hidden" : ""}><label>每期金额（选填）</label><input name="installment" type="number" min="0.01" step="0.01" placeholder="如为分期请填写"></div>
-          <div class="form-field" id="installmentFrequencyField" ${kind === "credit" ? "hidden" : ""}><label>分期频率</label><select name="frequency"><option value="monthly">每月</option><option value="weekly">每周</option></select></div>`;
+          <div class="form-field" id="installmentAmountField"><label>每期金额（选填）</label><input name="installment" type="number" min="0.01" step="0.01" placeholder="如为分期请填写"></div>
+          <div class="form-field" id="installmentCountField"><label>分期总期数</label><input name="installmentCount" type="number" min="1" step="1" placeholder="如为分期请填写"></div>
+          <div class="form-field" id="installmentFrequencyField"><label>分期频率</label><select name="frequency"><option value="monthly">每月</option><option value="weekly">每周</option></select></div>`;
       }
       function updateDebtKindFields(form) {
         const kind = form.elements.kind.value;
         const isCredit = kind === "credit";
         document.getElementById("creditCategoryField").hidden = !isCredit;
-        document.getElementById("installmentAmountField").hidden = isCredit;
-        document.getElementById("installmentFrequencyField").hidden = isCredit;
-        document.getElementById("installmentDayField").hidden = isCredit || form.elements.frequency.value === "weekly";
-        document.getElementById("installmentWeekdayField").hidden = isCredit || form.elements.frequency.value !== "weekly";
+        document.getElementById("installmentDayField").hidden = form.elements.frequency.value === "weekly";
+        document.getElementById("installmentWeekdayField").hidden = form.elements.frequency.value !== "weekly";
         document.getElementById("debtAccountLabel").textContent = isCredit ? "默认还款账户" : "关联账户";
         document.getElementById("debtNameLabel").textContent = isCredit ? "平台 / 商家" : "出借人 / 平台";
         document.getElementById("debtDateLabel").textContent = isCredit ? "消费日期和时间" : "借款日期和时间";
@@ -856,7 +981,7 @@
         form.elements.name.placeholder = isCredit ? "例如：花呗、淘宝" : "例如：张先生";
         form.elements.note.placeholder = isCredit ? "例如：买了耳机" : "期数、利息或其他说明";
         document.getElementById("debtNotice").textContent = isCredit
-          ? "保存后会记入本月支出和待还欠款，不会增加或扣减账户余额；登记还款时再扣除所选付款账户。每次购物请单独记一笔。"
+          ? "普通消费会在本月一次性计入支出；填写每期金额和总期数后，本金改按每月到期金额计入支出。登记还款时再扣除所选付款账户。"
           : kind === "borrow"
             ? "保存后会自动记入实际到账的账户余额和待还欠款；之后花掉时请另记支出。"
             : "保存后会自动扣减关联账户余额，并记为待收借出款。";
@@ -876,14 +1001,19 @@
           <div class="form-field full"><label id="debtNoteLabel">备注（选填）</label><input name="note" maxlength="100" placeholder="填写商品名称、用途或其他说明"></div>
           <div class="notice full" id="debtNotice">保存后会自动记入账户余额：借入增加余额，借出扣减余额。每期从下一个周期开始到期；本月到期且尚未登记的借入分期会计入本月支出。</div>
         </div><div class="form-actions"><button type="button" class="button" data-cancel>取消</button><button class="button primary">保存记录</button></div></form>`, data => {
-          const enteredAmount = Number(data.get("amount")), kind = data.get("kind"), amount = Math.abs(enteredAmount), installment = data.get("installment") ? Number(data.get("installment")) : 0;
+          const enteredAmount = Number(data.get("amount")), kind = data.get("kind"), amount = Math.abs(enteredAmount);
+          const installmentValue = String(data.get("installment") || "").trim();
+          const installment = installmentValue ? Number(installmentValue) : 0;
+          const installmentCountValue = String(data.get("installmentCount") || "").trim();
+          const installmentCount = installmentCountValue ? Number(installmentCountValue) : 0;
+          const hasInstallment = Boolean(installmentValue);
           const category = String(data.get("category") || "");
           const accountId = data.get("accountId"), frequency = data.get("frequency"), borrowedAtDateTime = String(data.get("borrowedAtDateTime") || "");
           const installmentDay = Number(data.get("installmentDay")), installmentWeekday = Number(data.get("installmentWeekday"));
-          if (!Number.isFinite(enteredAmount) || !["borrow", "credit", "lend"].includes(kind) || (kind === "lend" ? enteredAmount <= 0 : enteredAmount >= 0) || (kind === "credit" && !category) || (installment && (!Number.isFinite(installment) || installment <= 0)) || (installment && frequency === "monthly" && (!Number.isInteger(installmentDay) || installmentDay < 1 || installmentDay > 31)) || (installment && frequency === "weekly" && (!Number.isInteger(installmentWeekday) || installmentWeekday < 0 || installmentWeekday > 6)) || !accountById(accountId) || !isValidDateTime(borrowedAtDateTime)) { toast("借款/信用消费请填负数，借出请填正数，并检查日期、分类、分期金额和账户"); return; }
+          if (!Number.isFinite(enteredAmount) || !["borrow", "credit", "lend"].includes(kind) || (kind === "lend" ? enteredAmount <= 0 : enteredAmount >= 0) || (kind === "credit" && !category) || (Boolean(installmentValue) !== Boolean(installmentCountValue) || (hasInstallment && (!Number.isFinite(installment) || installment <= 0 || !Number.isInteger(installmentCount) || installmentCount < 1))) || (hasInstallment && frequency === "monthly" && (!Number.isInteger(installmentDay) || installmentDay < 1 || installmentDay > 31)) || (hasInstallment && frequency === "weekly" && (!Number.isInteger(installmentWeekday) || installmentWeekday < 0 || installmentWeekday > 6)) || !accountById(accountId) || !isValidDateTime(borrowedAtDateTime)) { toast("借款/信用消费请填负数，借出请填正数，并检查日期、分类、分期期数、每期金额和账户"); return; }
           const name = String(data.get("name")).trim();
           const note = String(data.get("note") || "").trim();
-          const debt = { id: makeId(), kind, name, amount, borrowedAt: borrowedAtDateTime.slice(0, 10), borrowedAtDateTime, dueDate: data.get("dueDate"), ...(kind === "credit" ? { category } : { installment, frequency, ...(installment ? frequency === "monthly" ? { installmentDay } : { installmentWeekday } : {}) }), accountId, note, payments: [] };
+          const debt = { id: makeId(), kind, name, amount, borrowedAt: borrowedAtDateTime.slice(0, 10), borrowedAtDateTime, dueDate: data.get("dueDate"), ...(kind === "credit" ? { category } : {}), installment, installmentCount, frequency, ...(hasInstallment ? frequency === "monthly" ? { installmentDay } : { installmentWeekday } : {}), accountId, note, payments: [] };
           state.debts.push(debt);
           state.transactions.push({
             id: makeId(),
@@ -928,11 +1058,12 @@
           <div class="form-field full"><label>记录类型</label><div class="type-switch"><button type="button" class="${debt.kind === "borrow" ? "selected" : ""}" data-kind="borrow">借到现金</button><button type="button" class="${debt.kind === "credit" ? "selected" : ""}" data-kind="credit">信用消费（花呗/信用卡）</button><button type="button" class="${debt.kind === "lend" ? "selected" : ""}" data-kind="lend">借出给别人</button></div><input name="kind" type="hidden" value="${escapeHtml(debt.kind)}"></div>
           <div class="form-field full"><label id="debtNameLabel">出借人 / 平台</label><input name="name" required maxlength="50" value="${escapeHtml(debt.name)}"></div>
           <div class="form-field"><label data-debt-amount-label>借款金额（元）</label><input name="amount" type="number" step="0.01" required value="${escapeHtml(debt.kind === "lend" ? Math.abs(Number(debt.amount)) : -Math.abs(Number(debt.amount)))}"></div>
-          ${debtTypeFieldsMarkup(debt.kind, debt.category || "购物")}
+          <div class="form-field" id="creditCategoryField" ${debt.kind === "credit" ? "" : "hidden"}><label>消费分类</label><select name="category">${["餐饮", "日用", "交通", "购物", "住房", "医疗", "其他"].map(category => `<option ${category === (debt.category || "购物") ? "selected" : ""}>${category}</option>`).join("")}</select></div>
           <div class="form-field"><label id="debtDateLabel">借款日期和时间</label><input name="borrowedAtDateTime" type="datetime-local" ${dateTimeRequired ? "required" : ""} value="${escapeHtml(debt.borrowedAtDateTime || "")}">${dateTimeRequired ? "" : '<div class="stat-note">旧记录未保存具体时间；如需更改日期，请填写实际日期和时间。</div>'}</div>
           <div class="form-field"><label>到期还款日</label><input name="dueDate" type="date" value="${escapeHtml(debt.dueDate || "")}"></div>
-          <div class="form-field" id="installmentAmountField" ${debt.kind === "credit" ? "hidden" : ""}><label>每期金额（选填）</label><input name="installment" type="number" min="0.01" step="0.01" value="${debt.installment ? escapeHtml(debt.installment) : ""}"></div>
-          <div class="form-field" id="installmentFrequencyField" ${debt.kind === "credit" ? "hidden" : ""}><label>分期频率</label><select name="frequency"><option value="monthly" ${frequency === "monthly" ? "selected" : ""}>每月</option><option value="weekly" ${frequency === "weekly" ? "selected" : ""}>每周</option></select></div>
+          <div class="form-field" id="installmentAmountField"><label>每期金额（选填）</label><input name="installment" type="number" min="0.01" step="0.01" value="${debt.installment ? escapeHtml(debt.installment) : ""}"></div>
+          <div class="form-field" id="installmentCountField"><label>分期总期数</label><input name="installmentCount" type="number" min="1" step="1" value="${debt.installmentCount || (debt.installment ? Math.ceil(Number(debt.amount) / Number(debt.installment)) : "")}"></div>
+          <div class="form-field" id="installmentFrequencyField"><label>分期频率</label><select name="frequency"><option value="monthly" ${frequency === "monthly" ? "selected" : ""}>每月</option><option value="weekly" ${frequency === "weekly" ? "selected" : ""}>每周</option></select></div>
           ${installmentScheduleFields(frequency, installmentDay, installmentWeekday)}
           <div class="form-field full"><label id="debtAccountLabel">关联账户</label><select name="accountId">${accountOptions(debt.accountId)}</select></div>
           <div class="form-field full"><label id="debtNoteLabel">备注（选填）</label><input name="note" maxlength="100" value="${escapeHtml(debt.note || "")}"></div>
@@ -943,6 +1074,8 @@
           const amount = Math.abs(enteredAmount);
           const installmentValue = String(data.get("installment") || "").trim();
           const installment = installmentValue ? Number(installmentValue) : 0;
+          const installmentCountValue = String(data.get("installmentCount") || "").trim();
+          const installmentCount = installmentCountValue ? Number(installmentCountValue) : 0;
           const kind = data.get("kind");
           const category = String(data.get("category") || "");
           const accountId = data.get("accountId");
@@ -950,8 +1083,9 @@
           const frequency = data.get("frequency");
           const installmentDay = Number(data.get("installmentDay"));
           const installmentWeekday = Number(data.get("installmentWeekday"));
-          if (!name || !["borrow", "credit", "lend"].includes(kind) || !Number.isFinite(enteredAmount) || (kind === "lend" ? enteredAmount <= 0 : enteredAmount >= 0) || (kind === "credit" && !category) || amount + 0.001 < paid || (installmentValue && (!Number.isFinite(installment) || installment <= 0)) || (installmentValue && frequency === "monthly" && (!Number.isInteger(installmentDay) || installmentDay < 1 || installmentDay > 31)) || (installmentValue && frequency === "weekly" && (!Number.isInteger(installmentWeekday) || installmentWeekday < 0 || installmentWeekday > 6)) || !accountById(accountId) || (borrowedAtDateTime && !isValidDateTime(borrowedAtDateTime)) || (dateTimeRequired && !borrowedAtDateTime)) {
-            toast("借款/信用消费请填负数、借出请填正数，并检查名称、分类、日期时间、分期金额和账户");
+          const hasInstallment = Boolean(installmentValue);
+          if (!name || !["borrow", "credit", "lend"].includes(kind) || !Number.isFinite(enteredAmount) || (kind === "lend" ? enteredAmount <= 0 : enteredAmount >= 0) || (kind === "credit" && !category) || amount + 0.001 < paid || Boolean(installmentValue) !== Boolean(installmentCountValue) || (hasInstallment && (!Number.isFinite(installment) || installment <= 0 || !Number.isInteger(installmentCount) || installmentCount < 1)) || (hasInstallment && frequency === "monthly" && (!Number.isInteger(installmentDay) || installmentDay < 1 || installmentDay > 31)) || (hasInstallment && frequency === "weekly" && (!Number.isInteger(installmentWeekday) || installmentWeekday < 0 || installmentWeekday > 6)) || !accountById(accountId) || (borrowedAtDateTime && !isValidDateTime(borrowedAtDateTime)) || (dateTimeRequired && !borrowedAtDateTime)) {
+            toast("借款/信用消费请填负数、借出请填正数，并检查名称、分类、日期时间、分期期数、每期金额和账户");
             return;
           }
           const previousKind = debt.kind;
@@ -962,11 +1096,12 @@
           if (borrowedAtDateTime) debt.borrowedAt = borrowedAtDateTime.slice(0, 10);
           debt.dueDate = String(data.get("dueDate") || "");
           debt.category = kind === "credit" ? category : undefined;
-          debt.installment = kind === "credit" ? 0 : installment;
+          debt.installment = installment;
+          debt.installmentCount = installmentCount;
           debt.frequency = frequency;
           delete debt.installmentDay;
           delete debt.installmentWeekday;
-          if (kind !== "credit" && installment) {
+          if (hasInstallment) {
             if (frequency === "monthly") debt.installmentDay = installmentDay;
             else debt.installmentWeekday = installmentWeekday;
           }
@@ -1037,6 +1172,23 @@
       document.getElementById("cashAdd").addEventListener("click", () => addTransaction({ accountId: "cash" }));
       document.getElementById("addAccount").addEventListener("click", addAccount);
       document.getElementById("addDebt").addEventListener("click", addDebt);
+      document.getElementById("addSavingsGoal").addEventListener("click", () => editSavingsGoal());
+      document.getElementById("savingsList").addEventListener("click", event => {
+        const deposit = event.target.closest("[data-save-to]");
+        if (deposit) { transferSavings(deposit.dataset.saveTo, "deposit"); return; }
+        const withdraw = event.target.closest("[data-save-from]");
+        if (withdraw) { transferSavings(withdraw.dataset.saveFrom, "withdraw"); return; }
+        const edit = event.target.closest("[data-edit-goal]");
+        if (edit) { editSavingsGoal(edit.dataset.editGoal); return; }
+        if (event.target.closest("[data-go-savings-accounts]")) { setPage("accounts"); return; }
+        const remove = event.target.closest("[data-delete-goal]");
+        if (!remove) return;
+        const goal = state.savingsGoals.find(item => item.id === remove.dataset.deleteGoal);
+        if (!goal) return;
+        if (!confirm(`删除存钱目标「${goal.name}」？不会删除关联账户或转账记录。`)) return;
+        state.savingsGoals = state.savingsGoals.filter(item => item.id !== goal.id);
+        persist(); render(); toast("存钱目标已删除");
+      });
       document.querySelector(".stats").addEventListener("click", event => {
         const card = event.target.closest("[data-month-detail]");
         if (card) openMonthDetails(card.dataset.monthDetail);
@@ -1240,10 +1392,11 @@
         const file = event.target.files[0]; if (!file) return;
         try {
           const data = JSON.parse(await file.text());
-          if (!data || !Array.isArray(data.accounts) || !Array.isArray(data.transactions) || !Array.isArray(data.debts)) throw new Error("文件结构不正确");
+          if (!data || !Array.isArray(data.accounts) || !Array.isArray(data.transactions) || !Array.isArray(data.debts) || (data.savingsGoals !== undefined && !Array.isArray(data.savingsGoals))) throw new Error("文件结构不正确");
           if (!data.accounts.every(a => a.id && a.name && Number.isFinite(Number(a.opening))) || !data.transactions.every(t => t.id && ["income", "expense", "transfer"].includes(t.type) && Number(t.amount) > 0) || !data.debts.every(d => d.id && Number(d.amount) > 0 && ["borrow", "credit", "lend"].includes(d.kind))) throw new Error("备份数据校验失败");
+          if ((data.savingsGoals || []).some(goal => !goal.id || !String(goal.name || "").trim() || !Number.isFinite(Number(goal.targetAmount)) || Number(goal.targetAmount) <= 0 || !data.accounts.some(account => account.id === goal.accountId && account.type !== "信用卡"))) throw new Error("存钱目标数据校验失败");
           if (!confirm("导入将替换当前账本数据，建议先导出当前备份。确定继续吗？")) return;
-          state = { accounts: data.accounts, transactions: data.transactions, debts: data.debts };
+          state = { accounts: data.accounts, transactions: data.transactions, debts: data.debts, savingsGoals: data.savingsGoals || [] };
           persist(); render(); toast("备份导入成功");
         } catch (error) { console.error("导入账本失败：", error); toast("导入失败：" + error.message); }
         finally { event.target.value = ""; }
